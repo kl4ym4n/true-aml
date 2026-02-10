@@ -1,0 +1,284 @@
+import { Transaction } from './address-check.transaction-analyzer';
+import { KNOWN_LIQUIDITY_POOLS } from './address-check.constants';
+
+export interface TransactionPatterns {
+  uniqueCounterparties: number;
+  averageTimeBetweenTx: number | null;
+  hasHighFrequency: boolean;
+  transactionTypes: string[];
+  liquidityPoolInteractions: number;
+  liquidityPoolAddresses: Set<string>;
+}
+
+export interface AddressInfo {
+  address: string;
+  balance: string;
+  accountType?: string;
+  trc20token_balances?: Array<any>;
+  date_created?: number;
+}
+
+export interface ContractInfo {
+  contract_address?: string;
+  contract_name?: string;
+  verified?: boolean;
+  open_source?: boolean;
+  trx_count?: number;
+  contract_type?: string;
+}
+
+export interface LiquidityEvents {
+  hasLiquidityEvents: boolean;
+  eventCount: number;
+  eventTypes: string[];
+}
+
+/**
+ * Service for analyzing transaction patterns and detecting suspicious behavior
+ */
+export class PatternAnalyzer {
+  /**
+   * Extract additional insights from transaction data
+   * Analyzes transaction patterns for risk assessment
+   * Uses TronScan API data: contract info, events, etc.
+   */
+  analyzeTransactionPatterns(
+    transactions: Transaction[],
+    addressInfo?: AddressInfo | null,
+    contractInfo?: ContractInfo | null,
+    liquidityEvents?: LiquidityEvents | null
+  ): TransactionPatterns {
+    console.log(`[PatternAnalyzer] Starting pattern analysis:`, {
+      transactionCount: transactions.length,
+      isContract: addressInfo?.accountType === 'Contract',
+      hasContractInfo: !!contractInfo,
+      hasLiquidityEvents: liquidityEvents?.hasLiquidityEvents,
+    });
+
+    if (transactions.length === 0) {
+      return {
+        uniqueCounterparties: 0,
+        averageTimeBetweenTx: null,
+        hasHighFrequency: false,
+        transactionTypes: [],
+        liquidityPoolInteractions: 0,
+        liquidityPoolAddresses: new Set<string>(),
+      };
+    }
+
+    // Extract unique counterparties
+    const counterparties = new Set<string>();
+    const transactionTypes = new Set<string>();
+    const liquidityPoolAddresses = new Set<string>();
+
+    transactions.forEach(tx => {
+      if (tx.from) {
+        counterparties.add(tx.from);
+      }
+      if (tx.to) {
+        counterparties.add(tx.to);
+      }
+
+      // Check if transaction interacts with known liquidity pools
+      if (tx.to && KNOWN_LIQUIDITY_POOLS.has(tx.to)) {
+        liquidityPoolAddresses.add(tx.to);
+      }
+      if (tx.from && KNOWN_LIQUIDITY_POOLS.has(tx.from)) {
+        liquidityPoolAddresses.add(tx.from);
+      }
+
+      // Check in raw_data contracts (for smart contract calls)
+      if (tx.raw_data?.contract) {
+        tx.raw_data.contract.forEach((contract: any) => {
+          transactionTypes.add(contract.type || 'unknown');
+
+          // Detect swap-like patterns (TriggerSmartContract with specific methods)
+          // Liquidity pools often use swap methods
+          if (contract.type === 'TriggerSmartContract') {
+            const param = contract.parameter?.value;
+            if (param?.data) {
+              const methodSignature = param.data.slice(0, 10); // First 4 bytes (8 hex chars + 0x)
+              // Common swap method signatures (simplified check)
+              // swapExactTokensForTokens, swapTokensForExactTokens, etc.
+              if (
+                methodSignature === '0x38ed1739' || // swapExactTokensForTokens
+                methodSignature === '0x8803dbee' || // swapTokensForExactTokens
+                methodSignature === '0x5c11d795' || // swapExactTokensForTokensSupportingFeeOnTransferTokens
+                methodSignature.startsWith('0x') // Any contract call might be a swap
+              ) {
+                // If calling a contract, it might be a liquidity pool interaction
+                if (param.contract_address) {
+                  // Mark as potential liquidity pool interaction
+                  // We'll count it if the contract address is in our known list
+                  // or if it's a frequent pattern
+                }
+              }
+            }
+          }
+        });
+      }
+    });
+
+    // They check: 1) known pool addresses, 2) swap operation patterns, 3) contract interactions
+    // Count transactions that look like swap operations (TriggerSmartContract calls)
+    const swapLikeTransactions = transactions.filter(tx => {
+      if (tx.raw_data?.contract) {
+        return tx.raw_data.contract.some(
+          (contract: any) =>
+            contract.type === 'TriggerSmartContract' &&
+            contract.parameter?.value?.data
+        );
+      }
+      return false;
+    }).length;
+
+    const totalTransactions = transactions.length;
+    const swapRatio =
+      totalTransactions > 0 ? swapLikeTransactions / totalTransactions : 0;
+
+    console.log(`[PatternAnalyzer] Swap analysis:`, {
+      totalTransactions,
+      swapLikeTransactions,
+      swapRatio: (swapRatio * 100).toFixed(2) + '%',
+    });
+
+    // it's likely interacting with liquidity pools
+    // They mark 100% if most/all transactions are with pools
+    if (totalTransactions > 0) {
+      // and analyzing transaction patterns (swap operations, contract calls)
+      // If the address itself is a contract, it might be a liquidity pool
+      const isContractAddress =
+        addressInfo?.accountType === 'Contract' ||
+        addressInfo?.accountType === 'ContractCreator';
+
+      // Enhanced detection using TronScan contract info and events
+      // If contract has liquidity events (Swap, AddLiquidity, etc.), it's likely a pool
+      const hasConfirmedLiquidityEvents =
+        liquidityEvents?.hasLiquidityEvents === true &&
+        liquidityEvents.eventCount > 0;
+
+      // If contract is verified and has high transaction count, might be a DEX/pool
+      const isHighActivityContract =
+        contractInfo?.verified === true &&
+        contractInfo?.trx_count &&
+        contractInfo.trx_count > 1000;
+
+      // Enhanced detection: if contract has confirmed liquidity events, it's definitely a pool
+      if (hasConfirmedLiquidityEvents) {
+        console.log(
+          `[PatternAnalyzer] Confirmed liquidity events detected, marking as pool`
+        );
+        // This is a confirmed liquidity pool - mark all interactions
+        transactions.forEach(tx => {
+          if (tx.to) liquidityPoolAddresses.add(tx.to);
+          if (tx.from) liquidityPoolAddresses.add(tx.from);
+        });
+      }
+      // If address is a contract itself, it might be a liquidity pool
+      else if (isContractAddress) {
+        // High activity verified contract might be a DEX/pool
+        if (isHighActivityContract) {
+          console.log(
+            `[PatternAnalyzer] High activity contract detected, marking as pool`
+          );
+          transactions.forEach(tx => {
+            if (tx.to) liquidityPoolAddresses.add(tx.to);
+            if (tx.from) liquidityPoolAddresses.add(tx.from);
+          });
+        }
+      }
+
+      // If high ratio of swap-like transactions (>=50%), mark as liquidity pool interaction
+      if (swapRatio >= 0.5) {
+        console.log(
+          `[PatternAnalyzer] High swap ratio (${(swapRatio * 100).toFixed(2)}%), marking as liquidity pool interaction`
+        );
+        // High liquidity pool interaction - add all contract addresses
+        transactions.forEach(tx => {
+          if (tx.to) {
+            liquidityPoolAddresses.add(tx.to);
+          }
+          // Also check contract addresses in raw_data
+          if (tx.raw_data?.contract) {
+            tx.raw_data.contract.forEach((contract: any) => {
+              if (contract.type === 'TriggerSmartContract') {
+                const param = contract.parameter?.value;
+                if (param?.contract_address) {
+                  // Contract address is in hex, but we can still track the pattern
+                  // The to/from fields should have the base58 address
+                }
+              }
+            });
+          }
+        });
+      } else if (swapRatio >= 0.2) {
+        console.log(
+          `[PatternAnalyzer] Medium swap ratio (${(swapRatio * 100).toFixed(2)}%), analyzing frequent contract addresses`
+        );
+        // Medium liquidity pool interaction (20-50%)
+        // Add frequent contract addresses
+        const contractAddressCounts = new Map<string, number>();
+        transactions.forEach(tx => {
+          if (tx.to) {
+            const count = contractAddressCounts.get(tx.to) || 0;
+            contractAddressCounts.set(tx.to, count + 1);
+          }
+        });
+        // Add addresses that appear in multiple transactions
+        contractAddressCounts.forEach((count, addr) => {
+          if (count >= 2) {
+            liquidityPoolAddresses.add(addr);
+          }
+        });
+        console.log(
+          `[PatternAnalyzer] Added ${contractAddressCounts.size} frequent contract addresses`
+        );
+      }
+    }
+
+    // Calculate average time between transactions
+    const sortedTimestamps = transactions
+      .map(tx => tx.block_timestamp)
+      .filter(ts => ts && ts > 0)
+      .sort((a, b) => a - b);
+
+    let averageTimeBetweenTx: number | null = null;
+    if (sortedTimestamps.length > 1) {
+      const timeDiffs: number[] = [];
+      for (let i = 1; i < sortedTimestamps.length; i++) {
+        timeDiffs.push(sortedTimestamps[i] - sortedTimestamps[i - 1]);
+      }
+      averageTimeBetweenTx =
+        timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length;
+    }
+
+    // Check for high frequency (multiple transactions in short time)
+    const hasHighFrequency =
+      sortedTimestamps.length > 1 &&
+      sortedTimestamps.some((ts, i) => {
+        if (i === 0) return false;
+        const diff = ts - sortedTimestamps[i - 1];
+        return diff < 60000; // Less than 1 minute between transactions
+      });
+
+    const result: TransactionPatterns = {
+      uniqueCounterparties: counterparties.size,
+      averageTimeBetweenTx,
+      hasHighFrequency,
+      transactionTypes: Array.from(transactionTypes),
+      liquidityPoolInteractions: liquidityPoolAddresses.size,
+      liquidityPoolAddresses,
+    };
+
+    console.log(`[PatternAnalyzer] Pattern analysis complete:`, {
+      uniqueCounterparties: result.uniqueCounterparties,
+      averageTimeBetweenTx: result.averageTimeBetweenTx,
+      hasHighFrequency: result.hasHighFrequency,
+      transactionTypesCount: result.transactionTypes.length,
+      liquidityPoolInteractions: result.liquidityPoolInteractions,
+      liquidityPoolAddressesCount: result.liquidityPoolAddresses.size,
+    });
+
+    return result;
+  }
+}

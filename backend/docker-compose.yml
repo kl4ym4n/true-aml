@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: true-aml-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-true_aml}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aml-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: true-aml-app
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-true_aml}?schema=public
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY}
+      TRONSCAN_API_KEY: ${TRONSCAN_API_KEY:-}
+      BLOCKCHAIN_PROVIDER: ${BLOCKCHAIN_PROVIDER:-auto}
+      API_KEY: ${API_KEY:-}
+    ports:
+      - '${PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && node dist/index.js"
+    restart: unless-stopped
+    networks:
+      - aml-network
+
+volumes:
+  postgres_data:
+
+networks:
+  aml-network:
+    driver: bridge

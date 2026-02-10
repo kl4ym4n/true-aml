@@ -1,0 +1,29 @@
+{
+  "addresses": [
+    {
+      "address": "TExample123456789012345678901234567890",
+      "category": "SCAM",
+      "riskScore": 100,
+      "source": "manual"
+    },
+    {
+      "address": "TSanction1234567890123456789012345678",
+      "category": "SANCTION",
+      "riskScore": 100,
+      "source": "ofac"
+    },
+    {
+      "address": "TMixer123456789012345678901234567890",
+      "category": "MIXER",
+      "riskScore": 80,
+      "source": "chainalysis"
+    },
+    {
+      "address": "TExchange123456789012345678901234567",
+      "category": "EXCHANGE",
+      "riskScore": 50,
+      "source": "internal"
+    }
+  ]
+}
+

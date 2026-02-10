@@ -1,0 +1,177 @@
+.header {
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.headerContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+  letter-spacing: -0.5px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.apiKeySection {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.apiKeyDisplay {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.apiKeyLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #666;
+  white-space: nowrap;
+}
+
+.apiKeyValue {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  color: #333;
+  background: #f5f5f5;
+  padding: 0.375rem 0.625rem;
+  border-radius: 4px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noApiKey {
+  font-size: 0.875rem;
+  color: #999;
+  font-style: italic;
+}
+
+.apiKeyInput {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  min-width: 200px;
+  max-width: 400px;
+  transition: border-color 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #666;
+}
+
+.toggleButton,
+.editButton,
+.addButton,
+.saveButton,
+.cancelButton,
+.clearButton {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: white;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.toggleButton {
+  background: #f5f5f5;
+  border: none;
+  font-size: 1rem;
+  padding: 0.375rem 0.5rem;
+}
+
+.toggleButton:hover {
+  background: #e0e0e0;
+}
+
+.editButton:hover,
+.addButton:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+.saveButton {
+  background: #333;
+  color: white;
+  border-color: #333;
+}
+
+.saveButton:hover:not(:disabled) {
+  background: #555;
+}
+
+.saveButton:disabled {
+  background: #ccc;
+  border-color: #ccc;
+  cursor: not-allowed;
+}
+
+.cancelButton:hover {
+  background: #f5f5f5;
+}
+
+.clearButton {
+  color: #dc3545;
+  border-color: #dc3545;
+}
+
+.clearButton:hover {
+  background: #dc3545;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .headerContent {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .apiKeySection {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .apiKeyDisplay,
+  .apiKeyInput {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+

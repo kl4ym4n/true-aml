@@ -1,0 +1,75 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BlacklistCategory {
+  SCAM
+  SANCTION
+  MIXER
+  EXCHANGE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Blacklisted addresses known for illicit activities
+model BlacklistedAddress {
+  id         String            @id @default(uuid())
+  address    String            @unique @db.VarChar(42)
+  category   BlacklistCategory
+  riskScore  Int               @default(0)
+  source     String            @db.VarChar(255)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([address])
+  @@index([category])
+  @@index([riskScore])
+  @@map("blacklisted_addresses")
+}
+
+// Profile information for tracked addresses
+model AddressProfile {
+  id           String    @id @default(uuid())
+  address      String    @unique @db.VarChar(42)
+  firstSeenAt  DateTime
+  txCount      Int       @default(0)
+  lastCheckedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([address])
+  @@index([lastCheckedAt])
+  @@map("address_profiles")
+}
+
+// Transaction risk assessment results
+model TransactionCheck {
+  id         String     @id @default(uuid())
+  txHash     String     @db.VarChar(64)
+  riskScore  Int        @default(0)
+  riskLevel  RiskLevel
+  flags      String[]
+  createdAt  DateTime   @default(now())
+
+  @@index([txHash])
+  @@index([riskLevel])
+  @@index([riskScore])
+  @@index([createdAt])
+  @@map("transaction_checks")
+}
+
+

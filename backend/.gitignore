@@ -1,0 +1,16 @@
+node_modules
+dist
+*.log
+.env
+.env.local
+.env.*.local
+coverage
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Data files (keep examples)
+data/blacklist.json
+
+
