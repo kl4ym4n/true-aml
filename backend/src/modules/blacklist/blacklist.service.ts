@@ -21,9 +21,7 @@ export class BlacklistService {
    * @param address - TRON address to lookup
    * @returns Blacklist entry or null if not found
    */
-  async getBlacklistEntry(
-    address: string
-  ): Promise<BlacklistedAddress | null> {
+  async getBlacklistEntry(address: string): Promise<BlacklistedAddress | null> {
     return prisma.blacklistedAddress.findUnique({
       where: { address },
     });
@@ -62,7 +60,7 @@ export class BlacklistService {
       source: string;
     }>
   ): Promise<number> {
-    const operations = entries.map((entry) =>
+    const operations = entries.map(entry =>
       prisma.blacklistedAddress.upsert({
         where: { address: entry.address },
         update: {
@@ -124,7 +122,10 @@ export class BlacklistService {
 
       return { added: addedCount, removed: removedCount };
     } catch (error) {
-      console.error(`Failed to sync blacklist from contract ${contractAddress}:`, error);
+      console.error(
+        `Failed to sync blacklist from contract ${contractAddress}:`,
+        error
+      );
       throw error;
     }
   }
@@ -145,7 +146,10 @@ export class BlacklistService {
       });
       return result.blacklisted.has(address);
     } catch (error) {
-      console.error(`Failed to check contract blacklist for ${address}:`, error);
+      console.error(
+        `Failed to check contract blacklist for ${address}:`,
+        error
+      );
       return false;
     }
   }
@@ -153,4 +157,3 @@ export class BlacklistService {
 
 // Export singleton instance
 export const blacklistService = new BlacklistService();
-

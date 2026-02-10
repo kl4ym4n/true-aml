@@ -39,4 +39,3 @@ export interface RiskEngineConfig {
   };
   maxScore?: number; // Default 100
 }
-

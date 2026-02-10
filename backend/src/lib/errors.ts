@@ -35,4 +35,3 @@ export class UnauthorizedError extends AppError {
     super(401, message);
   }
 }
-

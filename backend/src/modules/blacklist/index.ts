@@ -1,14 +1,8 @@
 // Export service functions
-export {
-  blacklistService,
-  BlacklistService,
-} from './blacklist.service';
+export { blacklistService, BlacklistService } from './blacklist.service';
 
 // Export loader functions
-export {
-  loadBlacklistFromFile,
-  initializeBlacklist,
-} from './blacklist.loader';
+export { loadBlacklistFromFile, initializeBlacklist } from './blacklist.loader';
 
 // Export types
 export type {
@@ -16,4 +10,3 @@ export type {
   BlacklistJsonEntry,
   BlacklistJsonData,
 } from './blacklist.types';
-

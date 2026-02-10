@@ -36,15 +36,12 @@ export class RiskEngine {
    * @param metrics - Risk metrics (numbers, booleans, etc.)
    * @returns Risk score result with explanation
    */
-  calculateRisk(
-    flags: string[],
-    metrics: RiskMetric = {}
-  ): RiskScoreResult {
+  calculateRisk(flags: string[], metrics: RiskMetric = {}): RiskScoreResult {
     // Evaluate all rules
     const appliedRules = this.evaluateRules(flags, metrics);
 
     // Calculate risk score
-    const triggeredRules = appliedRules.filter((rule) => rule.triggered);
+    const triggeredRules = appliedRules.filter(rule => rule.triggered);
     const triggeredWeight = triggeredRules.reduce(
       (sum, rule) => sum + rule.weight,
       0
@@ -57,7 +54,9 @@ export class RiskEngine {
     // Calculate score as percentage of triggered weights
     // If total weight is 0, return 0
     const baseScore =
-      totalWeight > 0 ? (triggeredWeight / totalWeight) * this.config.maxScore : 0;
+      totalWeight > 0
+        ? (triggeredWeight / totalWeight) * this.config.maxScore
+        : 0;
 
     // Apply severity multipliers for critical/high severity rules
     const severityMultiplier = this.calculateSeverityMultiplier(triggeredRules);
@@ -85,11 +84,8 @@ export class RiskEngine {
   /**
    * Evaluate all rules against flags and metrics
    */
-  private evaluateRules(
-    flags: string[],
-    metrics: RiskMetric
-  ): AppliedRule[] {
-    return this.config.rules.map((rule) => ({
+  private evaluateRules(flags: string[], metrics: RiskMetric): AppliedRule[] {
+    return this.config.rules.map(rule => ({
       name: rule.name,
       description: rule.description,
       weight: rule.weight,
@@ -103,10 +99,10 @@ export class RiskEngine {
    */
   private calculateSeverityMultiplier(triggeredRules: AppliedRule[]): number {
     const hasCritical = triggeredRules.some(
-      (rule) => rule.severity === 'critical' && rule.triggered
+      rule => rule.severity === 'critical' && rule.triggered
     );
     const hasHigh = triggeredRules.some(
-      (rule) => rule.severity === 'high' && rule.triggered
+      rule => rule.severity === 'high' && rule.triggered
     );
 
     if (hasCritical) {
@@ -121,7 +117,9 @@ export class RiskEngine {
   /**
    * Determine risk level based on score
    */
-  private determineRiskLevel(score: number): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+  private determineRiskLevel(
+    score: number
+  ): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
     const thresholds = this.config.riskLevelThresholds;
     const critical = thresholds.critical ?? DEFAULT_THRESHOLDS.critical;
     const high = thresholds.high ?? DEFAULT_THRESHOLDS.high;
@@ -147,14 +145,14 @@ export class RiskEngine {
     }
 
     // Check for duplicate rule names
-    const ruleNames = this.config.rules.map((rule) => rule.name);
+    const ruleNames = this.config.rules.map(rule => rule.name);
     const uniqueNames = new Set(ruleNames);
     if (uniqueNames.size !== ruleNames.length) {
       throw new Error('Risk engine rules must have unique names');
     }
 
     // Validate weights are non-negative
-    const invalidWeights = this.config.rules.filter((rule) => rule.weight < 0);
+    const invalidWeights = this.config.rules.filter(rule => rule.weight < 0);
     if (invalidWeights.length > 0) {
       throw new Error('Risk rule weights must be non-negative');
     }
@@ -164,14 +162,14 @@ export class RiskEngine {
    * Get rule by name
    */
   getRule(name: string): RiskRule | undefined {
-    return this.config.rules.find((rule) => rule.name === name);
+    return this.config.rules.find(rule => rule.name === name);
   }
 
   /**
    * Update rule weight
    */
   updateRuleWeight(name: string, weight: number): void {
-    const rule = this.config.rules.find((r) => r.name === name);
+    const rule = this.config.rules.find(r => r.name === name);
     if (!rule) {
       throw new Error(`Rule ${name} not found`);
     }
@@ -186,7 +184,7 @@ export class RiskEngine {
    */
   addRule(rule: RiskRule): void {
     // Check for duplicate name
-    if (this.config.rules.some((r) => r.name === rule.name)) {
+    if (this.config.rules.some(r => r.name === rule.name)) {
       throw new Error(`Rule ${rule.name} already exists`);
     }
     this.config.rules.push(rule);
@@ -196,7 +194,7 @@ export class RiskEngine {
    * Remove a rule
    */
   removeRule(name: string): void {
-    const index = this.config.rules.findIndex((r) => r.name === name);
+    const index = this.config.rules.findIndex(r => r.name === name);
     if (index === -1) {
       throw new Error(`Rule ${name} not found`);
     }
@@ -213,7 +211,7 @@ export const RuleConditions = {
    */
   hasAnyFlag: (flagNames: string[]) => {
     return (flags: string[], _metrics: RiskMetric) => {
-      return flagNames.some((flag) => flags.includes(flag));
+      return flagNames.some(flag => flags.includes(flag));
     };
   },
 
@@ -222,7 +220,7 @@ export const RuleConditions = {
    */
   hasAllFlags: (flagNames: string[]) => {
     return (flags: string[], _metrics: RiskMetric) => {
-      return flagNames.every((flag) => flags.includes(flag));
+      return flagNames.every(flag => flags.includes(flag));
     };
   },
 
@@ -232,7 +230,7 @@ export const RuleConditions = {
   flagMatches: (pattern: string) => {
     const regex = new RegExp(pattern.replace(/\*/g, '.*'));
     return (flags: string[], _metrics: RiskMetric) => {
-      return flags.some((flag) => regex.test(flag));
+      return flags.some(flag => regex.test(flag));
     };
   },
 
@@ -277,18 +275,22 @@ export const RuleConditions = {
   /**
    * Combine multiple conditions with AND logic
    */
-  and: (...conditions: Array<(flags: string[], metrics: RiskMetric) => boolean>) => {
+  and: (
+    ...conditions: Array<(flags: string[], metrics: RiskMetric) => boolean>
+  ) => {
     return (flags: string[], metrics: RiskMetric) => {
-      return conditions.every((condition) => condition(flags, metrics));
+      return conditions.every(condition => condition(flags, metrics));
     };
   },
 
   /**
    * Combine multiple conditions with OR logic
    */
-  or: (...conditions: Array<(flags: string[], metrics: RiskMetric) => boolean>) => {
+  or: (
+    ...conditions: Array<(flags: string[], metrics: RiskMetric) => boolean>
+  ) => {
     return (flags: string[], metrics: RiskMetric) => {
-      return conditions.some((condition) => condition(flags, metrics));
+      return conditions.some(condition => condition(flags, metrics));
     };
   },
 };
@@ -354,7 +356,8 @@ export const PredefinedRuleSets = {
     },
     {
       name: 'tainted-1hop',
-      description: 'Sender received funds from blacklisted address (1-hop tainting)',
+      description:
+        'Sender received funds from blacklisted address (1-hop tainting)',
       weight: 80,
       severity: 'high',
       condition: RuleConditions.hasAnyFlag(['tainted-1hop']),

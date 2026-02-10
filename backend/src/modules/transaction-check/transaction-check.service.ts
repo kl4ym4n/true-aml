@@ -50,10 +50,10 @@ export class TransactionCheckService {
     }
 
     // Handle different response formats from different providers
-    const transactionData = Array.isArray(txDetails.data) 
-      ? txDetails.data[0] 
+    const transactionData = Array.isArray(txDetails.data)
+      ? txDetails.data[0]
       : txDetails.data || txDetails;
-    
+
     if (!transactionData) {
       throw new NotFoundError(`Transaction ${txHash} not found`);
     }
@@ -169,9 +169,7 @@ export class TransactionCheckService {
       for (const contract of contracts) {
         const parameter = contract.parameter?.value as any;
         if (parameter?.owner_address) {
-          senderAddress = this.hexToBase58(
-            parameter.owner_address
-          );
+          senderAddress = this.hexToBase58(parameter.owner_address);
           break;
         }
       }
@@ -196,8 +194,13 @@ export class TransactionCheckService {
             from: matchingTx.from,
             to: matchingTx.to,
             amount: matchingTx.amount || (matchingTx as any).value,
-            tokenAddress: matchingTx.tokenInfo?.address || (matchingTx as any).token_info?.address || '',
-            tokenSymbol: matchingTx.tokenInfo?.symbol || (matchingTx as any).token_info?.symbol,
+            tokenAddress:
+              matchingTx.tokenInfo?.address ||
+              (matchingTx as any).token_info?.address ||
+              '',
+            tokenSymbol:
+              matchingTx.tokenInfo?.symbol ||
+              (matchingTx as any).token_info?.symbol,
           };
         }
       }
@@ -223,12 +226,8 @@ export class TransactionCheckService {
       transaction.internal_transactions.length > 0
     ) {
       const internalTx = transaction.internal_transactions[0];
-      const fromAddress = this.hexToBase58(
-        internalTx.caller_address
-      );
-      const toAddress = this.hexToBase58(
-        internalTx.transferTo_address
-      );
+      const fromAddress = this.hexToBase58(internalTx.caller_address);
+      const toAddress = this.hexToBase58(internalTx.transferTo_address);
 
       return {
         from: fromAddress,
@@ -267,11 +266,14 @@ export class TransactionCheckService {
   private async checkTainting(address: string): Promise<TaintingCheckResult> {
     try {
       // Fetch recent incoming TRC-20 transactions for the sender
-      const transactions = await this.blockchainClient.getTRC20Transactions(address, {
-        limit: 50,
-        only_to: true, // Only incoming transactions
-        only_confirmed: true,
-      });
+      const transactions = await this.blockchainClient.getTRC20Transactions(
+        address,
+        {
+          limit: 50,
+          only_to: true, // Only incoming transactions
+          only_confirmed: true,
+        }
+      );
 
       // Check if any sender is blacklisted
       for (const tx of transactions.data || []) {

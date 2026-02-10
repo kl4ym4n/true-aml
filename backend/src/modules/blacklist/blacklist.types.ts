@@ -17,4 +17,3 @@ export interface BlacklistJsonEntry {
 export interface BlacklistJsonData {
   addresses: BlacklistJsonEntry[];
 }
-

@@ -35,4 +35,3 @@ export const checkRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-

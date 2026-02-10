@@ -33,5 +33,6 @@ export const transactionCheckRequestSchema = z.object({
 });
 
 export type AddressCheckRequest = z.infer<typeof addressCheckRequestSchema>;
-export type TransactionCheckRequest = z.infer<typeof transactionCheckRequestSchema>;
-
+export type TransactionCheckRequest = z.infer<
+  typeof transactionCheckRequestSchema
+>;

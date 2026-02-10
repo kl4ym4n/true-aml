@@ -33,4 +33,3 @@ export interface TransactionAnalysisResult {
   flags: string[];
   metadata: TransactionAnalysisMetadata;
 }
-

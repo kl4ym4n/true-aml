@@ -13,18 +13,19 @@ export const validate = (schema: ZodSchema) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const errors = error.errors.map((err) => ({
+        const errors = error.errors.map(err => ({
           field: err.path.join('.'),
           message: err.message,
         }));
 
-        next(new BadRequestError(
-          `Validation failed: ${errors.map((e) => e.message).join(', ')}`
-        ));
+        next(
+          new BadRequestError(
+            `Validation failed: ${errors.map(e => e.message).join(', ')}`
+          )
+        );
         return;
       }
       next(error);
     }
   };
 };
-

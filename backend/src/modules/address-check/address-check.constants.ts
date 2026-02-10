@@ -42,17 +42,15 @@ export const LONG_HISTORY_DAYS = 365; // Long history = more than 1 year
 // These are addresses of DEX routers and liquidity pools that are commonly used
 // Note: This list should be maintained and updated regularly
 // Sources: JustSwap, SunSwap, PoloniDEX and other major TRON DEXes
-export const KNOWN_LIQUIDITY_POOLS = new Set<string>(
-  [
-    // JustSwap (JustLend) - Main DEX on TRON
-    'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax', // JustSwap Router V1
-    'TQn9Y2khEsLMWoMTR9xyn1fUm2S3Ek8v07', // JustSwap Factory
-    // SunSwap (Sun.io) - Another major DEX
-    'TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S', // SunSwap Factory
-    'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax', // SunSwap Router (may overlap)
-    // PoloniDEX
-    'TQn9Y2khEsLMWoMTR9xyn1fUm2S3Ek8v07', // PoloniDEX Router
-    // Add more DEX router addresses as discovered
-    // TODO: Consider fetching this list dynamically from a trusted source
-  ]
-);
+export const KNOWN_LIQUIDITY_POOLS = new Set<string>([
+  // JustSwap (JustLend) - Main DEX on TRON
+  'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax', // JustSwap Router V1
+  'TQn9Y2khEsLMWoMTR9xyn1fUm2S3Ek8v07', // JustSwap Factory
+  // SunSwap (Sun.io) - Another major DEX
+  'TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S', // SunSwap Factory
+  'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax', // SunSwap Router (may overlap)
+  // PoloniDEX
+  'TQn9Y2khEsLMWoMTR9xyn1fUm2S3Ek8v07', // PoloniDEX Router
+  // Add more DEX router addresses as discovered
+  // TODO: Consider fetching this list dynamically from a trusted source
+]);

@@ -123,4 +123,3 @@ export interface TRC20TransactionsOptions {
   only_from?: boolean;
   contract_address?: string;
 }
-

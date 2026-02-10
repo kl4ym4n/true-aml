@@ -26,7 +26,9 @@ function validateEnv(): EnvConfig {
     throw new Error('TRONGRID_API_KEY is required');
   }
 
-  const blockchainProvider = (process.env.BLOCKCHAIN_PROVIDER as 'trongrid' | 'tronscan' | 'auto') || 'auto';
+  const blockchainProvider =
+    (process.env.BLOCKCHAIN_PROVIDER as 'trongrid' | 'tronscan' | 'auto') ||
+    'auto';
 
   return {
     port,
@@ -39,5 +41,3 @@ function validateEnv(): EnvConfig {
 }
 
 export const env = validateEnv();
-
-

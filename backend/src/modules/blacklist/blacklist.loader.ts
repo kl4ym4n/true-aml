@@ -31,7 +31,7 @@ export async function loadBlacklistFromFile(
     }
 
     // Validate and transform entries
-    const entries: BlacklistEntry[] = jsonData.addresses.map((entry) => {
+    const entries: BlacklistEntry[] = jsonData.addresses.map(entry => {
       validateBlacklistEntry(entry);
       return {
         address: entry.address,
@@ -43,13 +43,12 @@ export async function loadBlacklistFromFile(
 
     // Remove duplicates by address (keep first occurrence)
     const uniqueEntries = Array.from(
-      new Map(entries.map((entry) => [entry.address, entry])).values()
+      new Map(entries.map(entry => [entry.address, entry])).values()
     );
 
     // Bulk upsert to database
-    const count = await blacklistService.bulkUpsertBlacklistEntries(
-      uniqueEntries
-    );
+    const count =
+      await blacklistService.bulkUpsertBlacklistEntries(uniqueEntries);
 
     console.log(
       `✅ Loaded ${count} blacklist entries from ${filePath} (${jsonData.addresses.length - count} duplicates skipped)`
@@ -97,9 +96,7 @@ function validateBlacklistEntry(entry: BlacklistJsonEntry): void {
 
   if (entry.riskScore !== undefined) {
     if (typeof entry.riskScore !== 'number' || entry.riskScore < 0) {
-      throw new Error(
-        'Invalid riskScore: must be a non-negative number'
-      );
+      throw new Error('Invalid riskScore: must be a non-negative number');
     }
   }
 }
@@ -108,9 +105,7 @@ function validateBlacklistEntry(entry: BlacklistJsonEntry): void {
  * Initialize blacklist from file at startup
  * @param filePath - Optional path to blacklist JSON file
  */
-export async function initializeBlacklist(
-  filePath?: string
-): Promise<void> {
+export async function initializeBlacklist(filePath?: string): Promise<void> {
   try {
     await loadBlacklistFromFile(filePath);
   } catch (error) {
@@ -118,4 +113,3 @@ export async function initializeBlacklist(
     // Don't throw - allow server to start even if blacklist fails to load
   }
 }
-
