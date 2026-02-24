@@ -41,6 +41,7 @@ export const checkAddress = async (
           transactionCount: result.metadata.transactionCount,
           addressAgeDays: result.metadata.addressAgeDays,
           firstSeenAt: result.metadata.firstSeenAt?.toISOString() || null,
+          sourceBreakdown: result.metadata.sourceBreakdown ?? undefined,
         },
       },
     });

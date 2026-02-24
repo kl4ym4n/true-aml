@@ -7,6 +7,7 @@ import {
   AddressAnalysisResult,
   AddressAnalysisMetadata,
   RiskFlag,
+  SourceBreakdown,
 } from './address-check.types';
 import {
   SEVERITY_BLACKLISTED,
@@ -415,6 +416,7 @@ export class AddressCheckService {
     // If base score is low, we check unique counterparties to see if they have high risk
     let finalRiskScore = baseRiskScore;
     const flagsFromOtherHops: RiskFlag[] = []; // collect flags from 2nd/3rd hop for main address result
+    const hopEntityFlags: RiskFlag[][] = [flags]; // per-entity flags for source breakdown (direct + 2nd + 3rd hop)
 
     if (hopLevel === 0) {
       if (baseRiskScore < 60) {
@@ -464,6 +466,7 @@ export class AddressCheckService {
             secondHopScore += counterpartyResult.riskScore;
             checkedCounterparties++;
             flagsFromOtherHops.push(...counterpartyResult.flags);
+            hopEntityFlags.push(counterpartyResult.flags);
             console.log(`[AddressCheck] 2nd hop result for ${counterparty}:`, {
               riskScore: counterpartyResult.riskScore,
               flags: counterpartyResult.flags,
@@ -542,6 +545,7 @@ export class AddressCheckService {
                 thirdHopScore += thirdHopResult.riskScore;
                 checkedThirdHop++;
                 flagsFromOtherHops.push(...thirdHopResult.flags);
+                hopEntityFlags.push(thirdHopResult.flags);
                 console.log(
                   `[AddressCheck] 3rd hop result for ${thirdHopAddr}:`,
                   {
@@ -602,6 +606,11 @@ export class AddressCheckService {
           }
         : undefined;
 
+    const sourceBreakdown =
+      hopLevel === 0
+        ? this.computeSourceBreakdown(hopEntityFlags)
+        : undefined;
+
     const metadata: AddressAnalysisMetadata = {
       address,
       isBlacklisted: isBlacklisted || addressSecurity?.isBlacklisted || false,
@@ -622,6 +631,7 @@ export class AddressCheckService {
             tags: addressSecurity.tags,
           }
         : undefined,
+      ...(sourceBreakdown && { sourceBreakdown }),
     };
 
     const finalFlags =
@@ -633,6 +643,81 @@ export class AddressCheckService {
       riskScore: finalRiskScore,
       flags: finalFlags,
       metadata,
+    };
+  }
+
+  /**
+   * Compute BitOK-style source breakdown (trusted / suspicious / dangerous) from per-entity flags.
+   * Each entity (direct address or counterparty) is classified into worst category and one sub-label; percentages are share of entities.
+   */
+  private computeSourceBreakdown(entityFlagsList: RiskFlag[][]): SourceBreakdown {
+    const dangerous: Record<string, number> = {
+      Blacklisted: 0,
+      Scam: 0,
+      Phishing: 0,
+      Malicious: 0,
+    };
+    const suspicious: Record<string, number> = {
+      'Liquidity Pools': 0,
+      'New Address': 0,
+      'High Frequency': 0,
+      'Limited Counterparties': 0,
+    };
+    const trusted: Record<string, number> = {
+      Other: 0,
+    };
+
+    for (const flags of entityFlagsList) {
+      const set = new Set(flags);
+      if (set.has('blacklisted')) {
+        dangerous.Blacklisted++;
+        continue;
+      }
+      if (set.has('scam')) {
+        dangerous.Scam++;
+        continue;
+      }
+      if (set.has('phishing')) {
+        dangerous.Phishing++;
+        continue;
+      }
+      if (set.has('malicious')) {
+        dangerous.Malicious++;
+        continue;
+      }
+      if (set.has('liquidity-pool')) {
+        suspicious['Liquidity Pools']++;
+        continue;
+      }
+      if (set.has('new-address')) {
+        suspicious['New Address']++;
+        continue;
+      }
+      if (set.has('high-frequency')) {
+        suspicious['High Frequency']++;
+        continue;
+      }
+      if (set.has('limited-counterparties')) {
+        suspicious['Limited Counterparties']++;
+        continue;
+      }
+      trusted.Other++;
+    }
+
+    const total = entityFlagsList.length;
+    const pct = (count: number) =>
+      total === 0 ? 0 : Math.round((count / total) * 10000) / 100;
+
+    return {
+      trusted: Object.fromEntries(
+        Object.entries(trusted).map(([k, v]) => [k, pct(v)])
+      ),
+      suspicious: Object.fromEntries(
+        Object.entries(suspicious).map(([k, v]) => [k, pct(v)])
+      ),
+      dangerous: Object.fromEntries(
+        Object.entries(dangerous).map(([k, v]) => [k, pct(v)])
+      ),
     };
   }
 
