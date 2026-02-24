@@ -9,6 +9,16 @@ export type RiskFlag =
   | 'malicious'
   | 'liquidity-pool';
 
+/**
+ * Breakdown of fund sources by category (trusted / suspicious / dangerous).
+ * Percentages per sub-label, 0–100, two decimals.
+ */
+export interface SourceBreakdown {
+  trusted: Record<string, number>;
+  suspicious: Record<string, number>;
+  dangerous: Record<string, number>;
+}
+
 export interface AddressAnalysisMetadata {
   address: string;
   isBlacklisted: boolean;
@@ -31,6 +41,8 @@ export interface AddressAnalysisMetadata {
     isMalicious: boolean;
     tags: string[];
   };
+  /** Breakdown of sources by category (trusted/suspicious/dangerous) with percentages */
+  sourceBreakdown?: SourceBreakdown;
 }
 
 export interface AddressAnalysisResult {

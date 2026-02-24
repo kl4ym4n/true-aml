@@ -22,6 +22,13 @@ export interface ApiResponse<T> {
   };
 }
 
+// Source breakdown (trusted / suspicious / dangerous)
+export interface SourceBreakdown {
+  trusted: Record<string, number>;
+  suspicious: Record<string, number>;
+  dangerous: Record<string, number>;
+}
+
 // Backend response format
 export interface AddressCheckResponse {
   address: string;
@@ -33,6 +40,7 @@ export interface AddressCheckResponse {
     transactionCount: number;
     addressAgeDays: number | null;
     firstSeenAt: string | null;
+    sourceBreakdown?: SourceBreakdown;
   };
 }
 

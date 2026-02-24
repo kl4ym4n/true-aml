@@ -176,3 +176,90 @@
   font-size: 0.9375rem;
 }
 
+.sourceBreakdown {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #eee;
+}
+
+.sourceBreakdownTitle {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 1rem;
+}
+
+.sourceBreakdownGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.sourceCategory,
+.sourceCategorySuspicious,
+.sourceCategoryDangerous {
+  padding: 1rem;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.sourceCategorySuspicious {
+  background: #fff8e6;
+  border: 1px solid #ffe4a0;
+}
+
+.sourceCategoryDangerous {
+  background: #fff0f0;
+  border: 1px solid #f5c6cb;
+}
+
+.sourceCategoryHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.75rem;
+}
+
+.sourceCategoryIcon {
+  color: #198754;
+  font-size: 1rem;
+}
+
+.sourceCategoryIconSuspicious {
+  color: #b8860b;
+  font-size: 1rem;
+}
+
+.sourceCategoryIconDangerous {
+  color: #dc3545;
+  font-size: 0.75rem;
+}
+
+.sourceList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sourceRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0;
+  color: #555;
+}
+
+.sourceRow span:last-child {
+  font-weight: 600;
+  color: #333;
+  margin-left: 0.5rem;
+}
+
