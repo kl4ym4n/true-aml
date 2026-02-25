@@ -185,20 +185,63 @@ export default function Home() {
                         </span>
                       </div>
                     )}
-                    {addressResult.metadata.transactionCount !== undefined && (
-                      <div className={styles.resultItem}>
-                        <span className={styles.label}>Transaction Count</span>
-                        <span className={styles.value}>
-                          {addressResult.metadata.transactionCount}
-                        </span>
-                      </div>
-                    )}
                     {addressResult.metadata.isBlacklisted && (
                       <div className={styles.resultItem}>
                         <span className={styles.label}>Blacklist Status</span>
                         <span className={styles.warning}>
                           Blacklisted
                         </span>
+                      </div>
+                    )}
+                    {addressResult.metadata.sourceBreakdown && (
+                      <div className={styles.sourceBreakdown}>
+                        <span className={styles.sourceBreakdownTitle}>
+                          Sources of funds
+                        </span>
+                        <div className={styles.sourceBreakdownGrid}>
+                          <div className={styles.sourceCategory}>
+                            <div className={styles.sourceCategoryHeader}>
+                              <span className={styles.sourceCategoryIcon} aria-hidden>✓</span>
+                              <span>Trusted sources</span>
+                            </div>
+                            <ul className={styles.sourceList}>
+                              {Object.entries(addressResult.metadata.sourceBreakdown.trusted).map(([name, pct]) => (
+                                <li key={name} className={styles.sourceRow}>
+                                  <span>{name}</span>
+                                  <span>{pct.toFixed(2)}%</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className={styles.sourceCategorySuspicious}>
+                            <div className={styles.sourceCategoryHeader}>
+                              <span className={styles.sourceCategoryIconSuspicious} aria-hidden>⚠</span>
+                              <span>Suspicious sources</span>
+                            </div>
+                            <ul className={styles.sourceList}>
+                              {Object.entries(addressResult.metadata.sourceBreakdown.suspicious).map(([name, pct]) => (
+                                <li key={name} className={styles.sourceRow}>
+                                  <span>{name}</span>
+                                  <span>{pct.toFixed(2)}%</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className={styles.sourceCategoryDangerous}>
+                            <div className={styles.sourceCategoryHeader}>
+                              <span className={styles.sourceCategoryIconDangerous} aria-hidden>●</span>
+                              <span>Dangerous sources</span>
+                            </div>
+                            <ul className={styles.sourceList}>
+                              {Object.entries(addressResult.metadata.sourceBreakdown.dangerous).map(([name, pct]) => (
+                                <li key={name} className={styles.sourceRow}>
+                                  <span>{name}</span>
+                                  <span>{pct.toFixed(2)}%</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>

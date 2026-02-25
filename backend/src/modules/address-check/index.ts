@@ -9,4 +9,5 @@ export type {
   AddressAnalysisResult,
   AddressAnalysisMetadata,
   RiskFlag,
+  SourceBreakdown,
 } from './address-check.types';
