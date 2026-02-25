@@ -31,7 +31,7 @@
 
 В `render.yaml` указано:
 
-- `databases.plan: starter` — база (при необходимости смени на `free` для теста).
+- `databases.plan: basic-256mb` — актуальный план БД (можно поставить `free` на 30 дней для теста).
 - `services[].plan: starter` — оба веб-сервиса.
 
 На Hobby можно оставить **Starter** для backend и frontend. План базы можно поменять в **Dashboard** → **true-aml-db** → **Settings**.
