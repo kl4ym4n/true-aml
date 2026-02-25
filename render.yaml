@@ -4,7 +4,7 @@
 databases:
   - name: true-aml-db
     databaseName: true_aml
-    plan: basic-256mb  # актуальный план
+    plan: free  # актуальный план
 
 services:
   # Backend API (Node + Express + Prisma)
