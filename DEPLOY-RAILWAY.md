@@ -1,68 +1,91 @@
 # Деплой True AML на Railway
 
-Railway обычно выходит дешевле Render при сопоставимом стеке (Node + Postgres + два сервиса).
+В одном проекте Railway будет **три сервиса**: база Postgres, бэкенд (API), фронт (Next.js). Бэкенд и фронт — два отдельных сервиса из одного и того же репозитория, с разными папками (Root Directory).
 
-## 1. Проект и репозиторий
+---
 
-1. Зайди на [railway.app](https://railway.app), войди через GitHub.
-2. **New Project** → **Deploy from GitHub repo**.
-3. Выбери репозиторий и ветку (например `main`).
+## Шаг 0. Что нужно заранее
 
-Пока что создаётся один сервис из корня репозитория — его мы потом заменим на монорепо с тремя сервисами.
+- Репозиторий на GitHub (или GitLab), код запушен.
+- Аккаунт на [railway.app](https://railway.app).
 
-## 2. Добавить PostgreSQL
+---
 
-1. В проекте нажми **+ New** → **Database** → **PostgreSQL**.
-2. Railway создаст базу и добавит переменную **`DATABASE_URL`** в проект (или в сервис, к которому привязана база).
+## Шаг 1. Создать проект и базу
 
-Если `DATABASE_URL` видна только у базы: в настройках базы открой **Variables** и при необходимости скопируй `DATABASE_URL`, чтобы подставить в бэкенд (см. ниже). Либо добавь бэкенд-сервис и привяжи к нему базу — тогда Railway подставит `DATABASE_URL` в бэкенд сам.
+1. Зайди на [railway.app](https://railway.app) → **Login** → **New Project**.
+2. Выбери **Deploy from GitHub repo** и подключи репозиторий `true-aml-fullstack` (и ветку, например `main`).  
+   Либо **Empty Project**, если репо подключишь позже вручную.
+3. В проекте нажми **+ New** → **Database** → **PostgreSQL**.  
+   Railway создаст базу и покажет переменные. Имя сервиса будет что-то вроде **Postgres** — запомни его.
 
-## 3. Настроить сервисы (монорепо)
+Пока что в проекте один сервис — база. Бэкенд и фронт добавим отдельно.
 
-Нужны три сущности в одном проекте: **PostgreSQL**, **Backend**, **Frontend**.
+---
 
-### Вариант A: из одного репо (рекомендуется)
+## Шаг 2. Добавить бэкенд (второй сервис)
 
-1. **Backend**
-   - **+ New** → **GitHub Repo** → тот же репозиторий.
-   - В настройках сервиса: **Settings** → **Root Directory** → укажи **`backend`**.
-   - **Settings** → **Build** — Railway подхватит `backend/Dockerfile` (или `backend/railway.json`).
-   - **Variables**: добавь переменные (или подключи базу, чтобы подтянулся `DATABASE_URL`):
-     - `NODE_ENV` = `production`
-     - `DATABASE_URL` — из PostgreSQL (часто подставляется автоматически, если база в том же проекте и привязана к сервису)
-     - `TRONGRID_API_KEY`, `TRONSCAN_API_KEY`, `BLOCKCHAIN_PROVIDER` = `tronscan`, `API_KEY` — свои значения.
-   - **Settings** → **Networking** → **Generate Domain** — получишь URL бэкенда, например `https://xxx.up.railway.app`.
+1. В том же проекте снова **+ New** → **GitHub Repo** (или **Empty Service**, если репо уже привязан к проекту).
+2. Выбери **тот же репозиторий** `true-aml-fullstack`.
+3. Откроется карточка нового сервиса. Зайди в **Settings**:
+   - **Root Directory** — поставь **`backend`** (именно папка `backend` в корне репо).  
+     Тогда Railway будет собирать только содержимое `backend/` и использовать `backend/Dockerfile` и `backend/railway.json`.
+   - Убедись, что **Build** → **Builder** = **Dockerfile** (не Nixpacks и не Railpack, если хочешь собирать через Docker).
+4. **Variables** (переменные окружения):
+   - **DATABASE_URL**: нажми **Add variable** → **Add reference** → выбери сервис **Postgres** → переменная **DATABASE_URL**.  
+     Либо скопируй значение `DATABASE_URL` из карточки Postgres и вставь вручную.
+   - Добавь остальное вручную:
+     - `TRONGRID_API_KEY` — твой ключ TronGrid
+     - `TRONSCAN_API_KEY` — ключ TronScan
+     - `BLOCKCHAIN_PROVIDER` = `tronscan`
+     - `API_KEY` — любой секретный ключ (например из `.env` локально)
+     - при желании `NODE_ENV` = `production`
+5. **Settings** → **Networking** → **Generate Domain**.  
+   Скопируй URL бэкенда, например: `https://xxx.up.railway.app` — он понадобится для фронта.
 
-2. **Frontend**
-   - **+ New** → **GitHub Repo** → тот же репозиторий.
-   - **Root Directory** → **`frontend`**.
-   - **Variables**:
-     - `NODE_ENV` = `production`
-     - **`NEXT_PUBLIC_API_BASE_URL`** = URL бэкенда из шага 1 (например `https://xxx.up.railway.app`).  
-       Важно: без слеша в конце и без пути вроде `/api` — только корень бэкенда.
-   - **Networking** → **Generate Domain** — получишь URL фронта.
+После пуша в репо или по кнопке **Deploy** Railway соберёт образ из `backend/Dockerfile` и запустит контейнер. В логах должны пройти миграции (`npx prisma migrate deploy`) и старт `node dist/index.js`. Healthcheck: `https://твой-бэкенд-url/health`.
 
-3. **Связать базу с бэкендом**  
-   В проекте открой PostgreSQL → **Variables** → скопируй `DATABASE_URL`. В сервисе Backend → **Variables** добавь/вставь `DATABASE_URL`. Либо в Backend в **Variables** нажми **Add variable** → **Add a reference** и выбери переменную базы (если Railway показывает ссылку на другой ресурс).
+---
 
-## 4. Конфиг в коде
+## Шаг 3. Добавить фронт (третий сервис)
 
-- **backend/railway.json** — сборка по Dockerfile, перед стартом выполняется `npx prisma migrate deploy`, healthcheck `/health`.
-- **frontend/railway.json** — сборка по Dockerfile, старт `node server.js` (Next.js standalone).
+1. Снова **+ New** → **GitHub Repo** → тот же репозиторий `true-aml-fullstack`.
+2. В настройках **нового** сервиса (**Settings**):
+   - **Root Directory** — поставь **`frontend`**.  
+     Тогда Railway будет собирать только `frontend/` и использовать `frontend/Dockerfile` и `frontend/railway.json`.
+   - **Build** → **Builder** = **Dockerfile**.
+3. **Variables**:
+   - **NEXT_PUBLIC_API_BASE_URL** = URL бэкенда **без слэша в конце**, например:  
+     `https://xxx.up.railway.app`
+   - при желании `NODE_ENV` = `production`
+4. **Settings** → **Networking** → **Generate Domain** — получишь URL фронта.
 
-При наличии Dockerfile в `backend` и `frontend` Railway по умолчанию использует их; `railway.json` уточняет pre-deploy и healthcheck.
+Сборка пойдёт по `frontend/Dockerfile` (Next.js standalone), старт — `node server.js`. Важно: если потом поменяешь URL бэкенда, обнови `NEXT_PUBLIC_API_BASE_URL` и сделай **Redeploy** фронта, иначе запросы уйдут на старый адрес.
 
-## 5. После деплоя
+---
 
-- **Backend:** `https://<твой-бэкенд>.up.railway.app`  
-  Проверка: `GET /health`.
-- **Frontend:** `https://<твой-фронт>.up.railway.app`  
-  В настройках фронта должен быть задан `NEXT_PUBLIC_API_BASE_URL` на URL бэкенда (и пересобран фронт после первого деплоя бэкенда, если URL добавляли позже).
+## Итог: что где лежит
 
-## 6. Если меняешь URL бэкенда
+| Сервис   | Root Directory | Сборка              | Старт / что делает        |
+|----------|----------------|---------------------|---------------------------|
+| Postgres | —              | образ от Railway    | база данных               |
+| Backend  | `backend`      | `backend/Dockerfile`| миграции + `node dist/index.js` |
+| Frontend | `frontend`     | `frontend/Dockerfile`| `node server.js` (Next.js) |
 
-Поменял домен бэкенда или пересоздал сервис → обнови в сервисе Frontend переменную **`NEXT_PUBLIC_API_BASE_URL`** и сделай **Redeploy** фронта (пересборка нужна, т.к. значение зашивается в билд).
+Общего Dockerfile в корне репо нет — и не нужен: у каждого сервиса свой контекст (`backend/` или `frontend/`).
 
-## 7. Стоимость
+---
 
-На Railway тарификация по использованию (CPU/RAM/сеть). Один небольшой Postgres + два небольших сервиса обычно укладываются в бесплатный лимит или в пару долларов в месяц. Точные лимиты смотри на [railway.app/pricing](https://railway.app/pricing).
+## Полезные ссылки и действия
+
+- **Логи:** карточка сервиса → **Deployments** → выбери деплой → **View Logs**.
+- **Переменные:** карточка сервиса → **Variables**.
+- **Ручной редеплой:** **Deployments** → **Redeploy**.
+
+Если бэкенд не стартует — проверь `DATABASE_URL` и логи (миграции). Если фронт не видит API — проверь `NEXT_PUBLIC_API_BASE_URL` и сделай Redeploy фронта после изменения переменной.
+
+---
+
+## Альтернатива: Railpack вместо Dockerfile
+
+В `backend/` и `frontend/` есть также `railpack.json`. Если в **Settings** → **Build** → **Builder** выбрать **Railpack**, Railway будет собирать по этим конфигам (без Dockerfile). Root Directory по-прежнему `backend` или `frontend`. Для фронта при Railpack можно задать переменные `PORT=3001` и `HOSTNAME=0.0.0.0`.
