@@ -20,6 +20,9 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy source code
 COPY . .
 
+# Ensure public exists (Next.js may not create it if empty)
+RUN mkdir -p public
+
 # Set build-time env
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
