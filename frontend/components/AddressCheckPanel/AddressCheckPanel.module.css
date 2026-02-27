@@ -1,0 +1,10 @@
+.panel {
+  width: 100%;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #999;
+  font-size: 0.9375rem;
+}
