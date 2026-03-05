@@ -96,7 +96,10 @@ export class TransactionAnalyzer {
         tx.raw_data.contract.forEach((contract: any) => {
           if (contract.type === 'TransferContract') {
             const param = contract.parameter?.value;
-            if (param?.owner_address && param.owner_address !== excludeAddress) {
+            if (
+              param?.owner_address &&
+              param.owner_address !== excludeAddress
+            ) {
               counterparties.add(param.owner_address);
             }
             if (param?.to_address && param.to_address !== excludeAddress) {
