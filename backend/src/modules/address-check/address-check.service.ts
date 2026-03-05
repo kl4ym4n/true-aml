@@ -425,7 +425,10 @@ export class AddressCheckService {
         );
         // Extract unique counterparties from the original address transactions
         const counterparties =
-          this.transactionAnalyzer.extractUniqueCounterparties(transactions);
+          this.transactionAnalyzer.extractUniqueCounterparties(
+            transactions,
+            address
+          );
         console.log(
           `[AddressCheck] Found ${counterparties.size} unique counterparties from original address transactions`
         );
@@ -516,7 +519,8 @@ export class AddressCheckService {
                 );
               const thirdHopCounterparties =
                 this.transactionAnalyzer.extractUniqueCounterparties(
-                  counterpartyTx
+                  counterpartyTx,
+                  counterparty
                 );
               console.log(
                 `[AddressCheck] Found ${thirdHopCounterparties.size} 3rd hop counterparties for ${counterparty}`
@@ -607,9 +611,7 @@ export class AddressCheckService {
         : undefined;
 
     const sourceBreakdown =
-      hopLevel === 0
-        ? this.computeSourceBreakdown(hopEntityFlags)
-        : undefined;
+      hopLevel === 0 ? this.computeSourceBreakdown(hopEntityFlags) : undefined;
 
     const metadata: AddressAnalysisMetadata = {
       address,
@@ -647,10 +649,12 @@ export class AddressCheckService {
   }
 
   /**
-   * Compute BitOK-style source breakdown (trusted / suspicious / dangerous) from per-entity flags.
+   * Compute source breakdown (trusted / suspicious / dangerous) from per-entity flags.
    * Each entity (direct address or counterparty) is classified into worst category and one sub-label; percentages are share of entities.
    */
-  private computeSourceBreakdown(entityFlagsList: RiskFlag[][]): SourceBreakdown {
+  private computeSourceBreakdown(
+    entityFlagsList: RiskFlag[][]
+  ): SourceBreakdown {
     const dangerous: Record<string, number> = {
       Blacklisted: 0,
       Scam: 0,
