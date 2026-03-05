@@ -176,6 +176,10 @@ export interface TronScanTransactionsOptions {
   filterTokenValue?: number;
   start_timestamp?: number;
   end_timestamp?: number;
+  /** Filter: only transactions where the given address is recipient (incoming) */
+  only_to?: boolean;
+  /** Filter: only transactions where the given address is sender (outgoing) */
+  only_from?: boolean;
 }
 
 export interface TronScanContractInfo {

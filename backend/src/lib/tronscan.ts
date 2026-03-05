@@ -117,9 +117,18 @@ export class TronScanClient {
     address: string,
     options?: TronScanTransactionsOptions
   ): Promise<TronScanTransactionsResponse> {
-    const params: Record<string, string | number | boolean> = {
-      address,
-    };
+    const params: Record<string, string | number | boolean> = { address };
+
+    // API has only fromAddress/toAddress (no generic "address")
+    if (options?.only_to) {
+      params.toAddress = address;
+    } else if (options?.only_from) {
+      params.fromAddress = address;
+    } else {
+      // All transactions: pass same address as both (API may return union)
+      params.fromAddress = address;
+      params.toAddress = address;
+    }
 
     if (options?.limit) {
       params.limit = options.limit;

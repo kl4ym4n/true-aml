@@ -22,6 +22,8 @@ export class TronScanAdapter implements IBlockchainClient {
       sort: options?.sort === 'timestamp' ? 'timestamp' : 'block',
       start_timestamp: options?.start_timestamp,
       end_timestamp: options?.end_timestamp,
+      only_to: options?.only_to,
+      only_from: options?.only_from,
     });
 
     const transactions: Transaction[] = (response.data || []).map(
