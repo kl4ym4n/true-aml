@@ -15,17 +15,23 @@ export class TransactionAnalyzer {
   constructor(private blockchainClient: IBlockchainClient) {}
 
   /**
-   * Fetch transactions for an address (both TRC-20 and regular TRX)
+   * Fetch transactions for an address (both TRC-20 and regular TRX).
+   * By default, fetches only incoming transactions (only_to) for AML source-of-funds analysis.
    */
-  async fetchAddressTransactions(address: string): Promise<Transaction[]> {
+  async fetchAddressTransactions(
+    address: string,
+    options?: { onlyIncoming?: boolean }
+  ): Promise<Transaction[]> {
     try {
+      const onlyIncoming = options?.onlyIncoming !== false;
       console.log(
-        `[TransactionAnalyzer] Fetching transactions for: ${address}`
+        `[TransactionAnalyzer] Fetching ${onlyIncoming ? 'incoming' : 'all'} transactions for: ${address}`
       );
-      // Fetch transactions with a reasonable limit
+      // Fetch transactions with a reasonable limit; only_to = only incoming for this address
       const response = await this.blockchainClient.getTransactions(address, {
-        limit: 200, // Get up to 200 transactions for analysis
+        limit: 200,
         only_confirmed: false,
+        only_to: onlyIncoming,
       });
 
       console.log(`[TransactionAnalyzer] Transactions response received:`, {
@@ -69,31 +75,34 @@ export class TransactionAnalyzer {
   }
 
   /**
-   * Extract unique counterparties from transactions
-   * Uses both raw_data and transaction fields (from/to)
+   * Extract unique counterparties from transactions.
+   * Optionally excludes an address (e.g. the analyzed address when using incoming-only tx).
    */
-  extractUniqueCounterparties(transactions: Transaction[]): Set<string> {
+  extractUniqueCounterparties(
+    transactions: Transaction[],
+    excludeAddress?: string
+  ): Set<string> {
     const counterparties = new Set<string>();
 
     transactions.forEach(tx => {
-      // Extract from transaction fields (if available)
-      if (tx.from) {
+      if (tx.from && tx.from !== excludeAddress) {
         counterparties.add(tx.from);
       }
-      if (tx.to) {
+      if (tx.to && tx.to !== excludeAddress) {
         counterparties.add(tx.to);
       }
 
-      // Extract from raw_data contracts
       if (tx.raw_data?.contract) {
         tx.raw_data.contract.forEach((contract: any) => {
-          // Extract addresses from TransferContract
           if (contract.type === 'TransferContract') {
             const param = contract.parameter?.value;
-            if (param?.owner_address) {
+            if (
+              param?.owner_address &&
+              param.owner_address !== excludeAddress
+            ) {
               counterparties.add(param.owner_address);
             }
-            if (param?.to_address) {
+            if (param?.to_address && param.to_address !== excludeAddress) {
               counterparties.add(param.to_address);
             }
           }
