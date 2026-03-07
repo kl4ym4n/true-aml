@@ -272,11 +272,15 @@ export class AddressCheckService {
       return { finalRiskScore, flagsFromOtherHops, hopEntityFlags };
     }
 
-    const secondHopResult = await this.runSecondHop(
-      Array.from(counterparties).slice(0, MAX_COUNTERPARTIES_2ND_HOP),
+    const secondHopAddresses = Array.from(counterparties).slice(
+      0,
+      MAX_COUNTERPARTIES_2ND_HOP
+    );
+    const secondHopResult = await this.runHop(
+      secondHopAddresses,
+      1,
       visitedAddresses,
-      flagsFromOtherHops,
-      hopEntityFlags
+      INDIRECT_RISK_WEIGHT
     );
     finalRiskScore += secondHopResult.contribution;
     flagsFromOtherHops.push(...secondHopResult.newFlags);
@@ -286,12 +290,18 @@ export class AddressCheckService {
       finalRiskScore < LOW_SCORE_THRESHOLD &&
       secondHopResult.checkedCount > 0
     ) {
-      const thirdHopResult = await this.runThirdHop(
+      const thirdHopAddresses = await this.gatherThirdHopAddresses(
         Array.from(counterparties).slice(
           0,
           Math.min(MAX_COUNTERPARTIES_3RD_HOP, MAX_COUNTERPARTIES_2ND_HOP)
         ),
         visitedAddresses
+      );
+      const thirdHopResult = await this.runHop(
+        thirdHopAddresses,
+        2,
+        visitedAddresses,
+        INDIRECT_RISK_WEIGHT * 0.5
       );
       finalRiskScore += thirdHopResult.contribution;
       flagsFromOtherHops.push(...thirdHopResult.newFlags);
@@ -305,11 +315,15 @@ export class AddressCheckService {
     };
   }
 
-  private async runSecondHop(
-    counterparties: string[],
+  /**
+   * Run risk analysis for a list of addresses at given hop level.
+   * Returns contribution to add to base score, and collected flags for source breakdown.
+   */
+  private async runHop(
+    addresses: string[],
+    hopLevel: number,
     visitedAddresses: Set<string>,
-    _flagsFromOtherHops: RiskFlag[],
-    _hopEntityFlags: RiskFlag[][]
+    weightMultiplier: number
   ): Promise<{
     contribution: number;
     checkedCount: number;
@@ -321,12 +335,12 @@ export class AddressCheckService {
     const newFlags: RiskFlag[] = [];
     const newHopFlags: RiskFlag[][] = [];
 
-    for (const counterparty of counterparties) {
-      if (visitedAddresses.has(counterparty)) continue;
+    for (const addr of addresses) {
+      if (visitedAddresses.has(addr)) continue;
 
       const result = await this.analyzeAddressWithHops(
-        counterparty,
-        1,
+        addr,
+        hopLevel,
         new Set(visitedAddresses)
       );
       totalScore += result.riskScore;
@@ -336,7 +350,7 @@ export class AddressCheckService {
     }
 
     const avgScore = checkedCount > 0 ? totalScore / checkedCount : 0;
-    const contribution = avgScore * INDIRECT_RISK_WEIGHT;
+    const contribution = avgScore * weightMultiplier;
 
     return {
       contribution,
@@ -346,56 +360,28 @@ export class AddressCheckService {
     };
   }
 
-  private async runThirdHop(
-    counterparties: string[],
+  /** Build list of 3rd-hop addresses from 2nd-hop counterparties (their transaction counterparties). */
+  private async gatherThirdHopAddresses(
+    secondHopCounterparties: string[],
     visitedAddresses: Set<string>
-  ): Promise<{
-    contribution: number;
-    newFlags: RiskFlag[];
-    newHopFlags: RiskFlag[][];
-  }> {
-    let totalScore = 0;
-    let checkedCount = 0;
-    const newFlags: RiskFlag[] = [];
-    const newHopFlags: RiskFlag[][] = [];
-
-    for (const counterparty of counterparties) {
+  ): Promise<string[]> {
+    const thirdHop: string[] = [];
+    for (const counterparty of secondHopCounterparties) {
       if (visitedAddresses.has(counterparty)) continue;
-
-      const counterpartyTx =
+      const tx =
         await this.transactionAnalyzer.fetchAddressTransactions(counterparty);
-      const thirdHopAddrs =
-        this.transactionAnalyzer.extractUniqueCounterparties(
-          counterpartyTx,
-          counterparty
-        );
-
-      for (const thirdHopAddr of Array.from(thirdHopAddrs).slice(
+      const addrs = this.transactionAnalyzer.extractUniqueCounterparties(
+        tx,
+        counterparty
+      );
+      for (const addr of Array.from(addrs).slice(
         0,
         MAX_THIRD_HOP_PER_COUNTERPARTY
       )) {
-        if (visitedAddresses.has(thirdHopAddr)) continue;
-
-        const result = await this.analyzeAddressWithHops(
-          thirdHopAddr,
-          2,
-          new Set(visitedAddresses)
-        );
-        totalScore += result.riskScore;
-        checkedCount++;
-        newFlags.push(...result.flags);
-        newHopFlags.push(result.flags);
+        thirdHop.push(addr);
       }
     }
-
-    const avgScore = checkedCount > 0 ? totalScore / checkedCount : 0;
-    const contribution = avgScore * INDIRECT_RISK_WEIGHT * 0.5;
-
-    return {
-      contribution,
-      newFlags,
-      newHopFlags,
-    };
+    return thirdHop;
   }
 }
 
