@@ -7,9 +7,7 @@ import type { AddressAnalysisResult, RiskFlag } from './address-check.types';
 import { INDIRECT_RISK_WEIGHT } from './address-check.constants';
 import { TransactionAnalyzer } from './address-check.transaction-analyzer';
 import type { Transaction } from './address-check.transaction-analyzer';
-import {
-  PatternAnalyzer,
-} from './address-check.pattern-analyzer';
+import { PatternAnalyzer } from './address-check.pattern-analyzer';
 import {
   RiskCalculator,
   AddressSecurity,
@@ -57,7 +55,10 @@ export class AddressCheckService {
       addressSecurity =
         await this.blockchainClient.checkAddressSecurity(address);
     } catch (error) {
-      console.warn(`[AddressCheck] Security check failed for ${address}:`, error);
+      console.warn(
+        `[AddressCheck] Security check failed for ${address}:`,
+        error
+      );
     }
 
     const isSecurityBlacklisted =
@@ -154,11 +155,15 @@ export class AddressCheckService {
         flags
       );
 
-    const cappedScore =
-      Math.round(Math.min(finalRiskScore, 100) * 100) / 100;
+    const cappedScore = Math.round(Math.min(finalRiskScore, 100) * 100) / 100;
 
     if (hopLevel === 0) {
-      await updateAddressProfile(prisma, address, firstSeenAt, transactionCount);
+      await updateAddressProfile(
+        prisma,
+        address,
+        firstSeenAt,
+        transactionCount
+      );
     }
 
     const liquidityPoolInfo = buildLiquidityPoolInfo(
@@ -359,10 +364,11 @@ export class AddressCheckService {
 
       const counterpartyTx =
         await this.transactionAnalyzer.fetchAddressTransactions(counterparty);
-      const thirdHopAddrs = this.transactionAnalyzer.extractUniqueCounterparties(
-        counterpartyTx,
-        counterparty
-      );
+      const thirdHopAddrs =
+        this.transactionAnalyzer.extractUniqueCounterparties(
+          counterpartyTx,
+          counterparty
+        );
 
       for (const thirdHopAddr of Array.from(thirdHopAddrs).slice(
         0,

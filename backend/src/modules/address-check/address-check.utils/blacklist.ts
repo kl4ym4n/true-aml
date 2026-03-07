@@ -1,5 +1,8 @@
 import type { RiskFlag, AddressAnalysisResult } from '../address-check.types';
-import { SEVERITY_BLACKLISTED, RISK_SCORE_BLACKLISTED } from '../address-check.constants';
+import {
+  SEVERITY_BLACKLISTED,
+  RISK_SCORE_BLACKLISTED,
+} from '../address-check.constants';
 
 export interface BlacklistInput {
   address: string;

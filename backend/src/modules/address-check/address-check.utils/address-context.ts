@@ -1,5 +1,9 @@
 import type { IBlockchainClient } from '../../../lib/blockchain-client.interface';
-import type { AddressInfo, ContractInfo, LiquidityEvents } from '../address-check.pattern-analyzer';
+import type {
+  AddressInfo,
+  ContractInfo,
+  LiquidityEvents,
+} from '../address-check.pattern-analyzer';
 
 export interface AddressContext {
   addressInfo: AddressInfo | null;
@@ -38,10 +42,9 @@ export async function fetchAddressContext(
           'hasLiquidityPoolEvents' in blockchainClient &&
           typeof (blockchainClient as any).hasLiquidityPoolEvents === 'function'
         ) {
-          liquidityEvents = (await (blockchainClient as any).hasLiquidityPoolEvents(
-            address,
-            50
-          )) as LiquidityEvents;
+          liquidityEvents = (await (
+            blockchainClient as any
+          ).hasLiquidityPoolEvents(address, 50)) as LiquidityEvents;
         }
       } catch {
         // continue without contract/liquidity data
