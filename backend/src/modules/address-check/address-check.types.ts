@@ -49,6 +49,20 @@ export interface AddressAnalysisMetadata {
   riskyIncomingVolume?: number;
   /** Percentage of incoming volume that is tainted */
   taintPercent?: number;
+  /** Top counterparties used in taint calculation, sorted by incoming volume */
+  topRiskyCounterparties?: Array<{
+    address: string;
+    incomingVolume: number;
+    riskScore: number;
+    risky: boolean;
+  }>;
+  /** Taint run stats for debugging and observability */
+  taintCalculationStats?: {
+    maxConsidered: number;
+    checkedCounterparties: number;
+    analyzedCounterparties: number;
+    skippedVisited: number;
+  };
   /** Explainable score breakdown for debugging/auditing */
   scoreBreakdown?: {
     baseRiskScore: number;

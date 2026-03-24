@@ -41,6 +41,30 @@ export interface AddressCheckResponse {
     addressAgeDays: number | null;
     firstSeenAt: string | null;
     sourceBreakdown?: SourceBreakdown;
+    totalIncomingVolume?: number;
+    riskyIncomingVolume?: number;
+    taintPercent?: number;
+    topRiskyCounterparties?: Array<{
+      address: string;
+      incomingVolume: number;
+      riskScore: number;
+      risky: boolean;
+    }>;
+    taintCalculationStats?: {
+      maxConsidered: number;
+      checkedCounterparties: number;
+      analyzedCounterparties: number;
+      skippedVisited: number;
+    };
+    scoreBreakdown?: {
+      baseRiskScore: number;
+      taintScore: number;
+      behavioralScore: number;
+      volumeScore: number;
+      preWhitelistScore: number;
+      whitelistLevel?: 'strong' | 'soft';
+      postWhitelistScore: number;
+    };
   };
 }
 

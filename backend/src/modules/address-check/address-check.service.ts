@@ -39,6 +39,20 @@ interface CachedSecurityData {
   } | null;
 }
 
+interface TaintCounterpartyInsight {
+  address: string;
+  incomingVolume: number;
+  riskScore: number;
+  risky: boolean;
+}
+
+interface TaintCalculationStats {
+  maxConsidered: number;
+  checkedCounterparties: number;
+  analyzedCounterparties: number;
+  skippedVisited: number;
+}
+
 export class AddressCheckService {
   private blockchainClient: IBlockchainClient;
   private transactionAnalyzer: TransactionAnalyzer;
@@ -164,6 +178,8 @@ export class AddressCheckService {
       totalIncomingVolume,
       riskyIncomingVolume,
       taintPercent,
+      topRiskyCounterparties,
+      taintCalculationStats,
       taintScore,
       behavioralScore,
       volumeScore,
@@ -237,6 +253,8 @@ export class AddressCheckService {
         totalIncomingVolume,
         riskyIncomingVolume,
         taintPercent,
+        topRiskyCounterparties,
+        taintCalculationStats,
         scoreBreakdown: {
           baseRiskScore: Math.round(baseRiskScore * 100) / 100,
           taintScore,
@@ -302,6 +320,8 @@ export class AddressCheckService {
     totalIncomingVolume: number;
     riskyIncomingVolume: number;
     taintPercent: number;
+    topRiskyCounterparties: TaintCounterpartyInsight[];
+    taintCalculationStats: TaintCalculationStats;
     taintScore: number;
     behavioralScore: number;
     volumeScore: number;
@@ -312,6 +332,13 @@ export class AddressCheckService {
     let totalIncomingVolume = 0;
     let riskyIncomingVolume = 0;
     let taintPercent = 0;
+    const topRiskyCounterparties: TaintCounterpartyInsight[] = [];
+    const taintCalculationStats: TaintCalculationStats = {
+      maxConsidered: 0,
+      checkedCounterparties: 0,
+      analyzedCounterparties: 0,
+      skippedVisited: 0,
+    };
     let taintScore = 0;
     let behavioralScore = 0;
     let volumeScore = 0;
@@ -324,6 +351,8 @@ export class AddressCheckService {
         totalIncomingVolume,
         riskyIncomingVolume,
         taintPercent,
+        topRiskyCounterparties,
+        taintCalculationStats,
         taintScore,
         behavioralScore,
         volumeScore,
@@ -338,9 +367,15 @@ export class AddressCheckService {
       const sorted = Array.from(volumeByCounterparty.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, MAX_COUNTERPARTIES_TAINT);
+      taintCalculationStats.maxConsidered = MAX_COUNTERPARTIES_TAINT;
+      taintCalculationStats.checkedCounterparties = sorted.length;
 
       for (const [counterparty, incomingVolume] of sorted) {
-        if (visitedAddresses.has(counterparty)) continue;
+        if (visitedAddresses.has(counterparty)) {
+          taintCalculationStats.skippedVisited++;
+          continue;
+        }
+        taintCalculationStats.analyzedCounterparties++;
 
         const result = await this.analyzeAddressWithHops(
           counterparty,
@@ -350,7 +385,15 @@ export class AddressCheckService {
         flagsFromOtherHops.push(...result.flags);
         hopEntityFlags.push(result.flags);
 
-        if (result.riskScore > RISKY_COUNTERPARTY_THRESHOLD) {
+        const isRisky = result.riskScore > RISKY_COUNTERPARTY_THRESHOLD;
+        topRiskyCounterparties.push({
+          address: counterparty,
+          incomingVolume: Math.round(incomingVolume * 100) / 100,
+          riskScore: Math.round(result.riskScore * 100) / 100,
+          risky: isRisky,
+        });
+
+        if (isRisky) {
           riskyIncomingVolume += incomingVolume;
         }
       }
@@ -379,6 +422,8 @@ export class AddressCheckService {
       totalIncomingVolume,
       riskyIncomingVolume,
       taintPercent,
+      topRiskyCounterparties,
+      taintCalculationStats,
       taintScore,
       behavioralScore,
       volumeScore,

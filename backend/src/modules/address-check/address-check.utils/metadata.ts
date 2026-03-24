@@ -30,6 +30,18 @@ export interface BuildMetadataParams {
   totalIncomingVolume?: number;
   riskyIncomingVolume?: number;
   taintPercent?: number;
+  topRiskyCounterparties?: Array<{
+    address: string;
+    incomingVolume: number;
+    riskScore: number;
+    risky: boolean;
+  }>;
+  taintCalculationStats?: {
+    maxConsidered: number;
+    checkedCounterparties: number;
+    analyzedCounterparties: number;
+    skippedVisited: number;
+  };
   scoreBreakdown?: {
     baseRiskScore: number;
     taintScore: number;
@@ -60,6 +72,8 @@ export function buildAnalysisMetadata(
     totalIncomingVolume,
     riskyIncomingVolume,
     taintPercent,
+    topRiskyCounterparties,
+    taintCalculationStats,
     scoreBreakdown,
   } = params;
 
@@ -78,6 +92,8 @@ export function buildAnalysisMetadata(
     ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
     ...(riskyIncomingVolume !== undefined && { riskyIncomingVolume }),
     ...(taintPercent !== undefined && { taintPercent }),
+    ...(topRiskyCounterparties !== undefined && { topRiskyCounterparties }),
+    ...(taintCalculationStats !== undefined && { taintCalculationStats }),
     ...(scoreBreakdown !== undefined && { scoreBreakdown }),
   };
 }
