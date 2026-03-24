@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "test": "tsx src/modules/address-check/__tests__/taint-model.test.ts && tsx src/modules/address-check/__tests__/pattern-heuristics.test.ts",
+    "test": "tsx src/modules/address-check/__tests__/taint-model.test.ts && tsx src/modules/address-check/__tests__/pattern-heuristics.test.ts && tsx src/modules/address-check/__tests__/service-regression.test.ts",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",

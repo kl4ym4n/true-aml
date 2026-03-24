@@ -55,6 +55,7 @@ interface TaintCalculationStats {
   checkedCounterparties: number;
   analyzedCounterparties: number;
   skippedVisited: number;
+  skippedDust: number;
   counterpartyCacheHits: number;
   counterpartyCacheMisses: number;
 }
@@ -403,6 +404,7 @@ export class AddressCheckService {
       checkedCounterparties: 0,
       analyzedCounterparties: 0,
       skippedVisited: 0,
+      skippedDust: 0,
       counterpartyCacheHits: 0,
       counterpartyCacheMisses: 0,
     };
@@ -449,6 +451,7 @@ export class AddressCheckService {
           sharePercent < MIN_TAINT_VOLUME_SHARE_PERCENT
         ) {
           // Ignore dust/noise counterparties for taint stability.
+          taintCalculationStats.skippedDust++;
           continue;
         }
         taintCalculationStats.analyzedCounterparties++;

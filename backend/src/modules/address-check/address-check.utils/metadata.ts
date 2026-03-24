@@ -41,6 +41,7 @@ export interface BuildMetadataParams {
     checkedCounterparties: number;
     analyzedCounterparties: number;
     skippedVisited: number;
+    skippedDust: number;
     counterpartyCacheHits: number;
     counterpartyCacheMisses: number;
   };
