@@ -61,10 +61,25 @@ async function testIncomingVolumePagination(): Promise<void> {
               amount: '2.5',
               confirmed: true,
               tokenInfo: {
-                symbol: 'USDT',
-                address: 'TUSDT',
+                symbol: 'USDC',
+                address: 'TUSDC',
                 decimals: 6,
-                name: 'Tether USD',
+                name: 'USD Coin',
+              },
+            },
+            {
+              hash: 'tx4',
+              blockNumber: 4,
+              blockTimestamp: 1_700_000_000_150,
+              to: address,
+              from: 'C',
+              amount: '100',
+              confirmed: true,
+              tokenInfo: {
+                symbol: 'TRX',
+                address: 'TTRX',
+                decimals: 6,
+                name: 'TRON',
               },
             },
           ],
@@ -107,6 +122,8 @@ async function testIncomingVolumePagination(): Promise<void> {
     Math.round((result.volumeByCounterparty.get('B') ?? 0) * 100) / 100,
     2.5
   );
+  // Non-stable token (TRX) should not be included in taint volume
+  assert.equal(result.volumeByCounterparty.has('C'), false);
   assert.equal(calls, 2);
 }
 

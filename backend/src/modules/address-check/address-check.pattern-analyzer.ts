@@ -96,12 +96,15 @@ export class PatternAnalyzer {
     let maxIncoming = 0;
     const incomingSenders = new Set<string>();
 
-    // Fast cash-out heuristic: outgoing shortly after any incoming
+    // Fast cash-out heuristic: outgoing shortly after significant incoming
     const FAST_CASHOUT_WINDOW_MS = 10 * 60 * 1000;
+    const MIN_FAST_CASHOUT_INCOMING = 10;
+    const FAST_CASHOUT_RATIO = 0.7;
     const sortedByTime = [...transactions].sort(
       (a, b) => (a.block_timestamp ?? 0) - (b.block_timestamp ?? 0)
     );
     let lastIncomingTs: number | null = null;
+    let lastIncomingAmount = 0;
     let hasFastCashOut = false;
 
     transactions.forEach(tx => {
@@ -188,8 +191,13 @@ export class PatternAnalyzer {
         const ts = tx.block_timestamp ?? 0;
         if (to && to === subjectAddress) {
           lastIncomingTs = ts;
+          lastIncomingAmount = amt;
         } else if (from && from === subjectAddress && lastIncomingTs) {
-          if (ts - lastIncomingTs <= FAST_CASHOUT_WINDOW_MS) {
+          if (
+            ts - lastIncomingTs <= FAST_CASHOUT_WINDOW_MS &&
+            lastIncomingAmount >= MIN_FAST_CASHOUT_INCOMING &&
+            amt >= lastIncomingAmount * FAST_CASHOUT_RATIO
+          ) {
             hasFastCashOut = true;
             break;
           }
@@ -199,11 +207,13 @@ export class PatternAnalyzer {
 
     // Fan-in heuristic: many incoming senders, relatively little outgoing
     const isFanIn =
-      incomingCount >= 10 &&
-      incomingSenders.size >= 5 &&
+      incomingCount >= 12 &&
+      incomingSenders.size >= 6 &&
+      totalIncoming >= 50 &&
       totalOutgoing > 0 &&
-      totalIncoming > 0 &&
-      totalOutgoing / totalIncoming <= 0.2;
+      totalOutgoing / totalIncoming <= 0.3 &&
+      (incomingCount > 0 ? totalIncoming / incomingCount : 0) <=
+        maxIncoming * 0.8;
 
     // They check: 1) known pool addresses, 2) swap operation patterns, 3) contract interactions
     // Count transactions that look like swap operations (TriggerSmartContract calls)

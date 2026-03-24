@@ -4,7 +4,11 @@ import { IBlockchainClient } from '../../lib/blockchain-client.interface';
 import { env } from '../../config/env';
 import prisma from '../../config/database';
 import type { AddressAnalysisResult, RiskFlag } from './address-check.types';
-import { RISKY_COUNTERPARTY_THRESHOLD } from './address-check.constants';
+import {
+  RISKY_COUNTERPARTY_THRESHOLD,
+  MIN_TAINT_COUNTERPARTY_VOLUME,
+  MIN_TAINT_VOLUME_SHARE_PERCENT,
+} from './address-check.constants';
 import { TransactionAnalyzer } from './address-check.transaction-analyzer';
 import type { Transaction } from './address-check.transaction-analyzer';
 import { PatternAnalyzer } from './address-check.pattern-analyzer';
@@ -51,6 +55,13 @@ interface TaintCalculationStats {
   checkedCounterparties: number;
   analyzedCounterparties: number;
   skippedVisited: number;
+  counterpartyCacheHits: number;
+  counterpartyCacheMisses: number;
+}
+
+interface CounterpartyCacheEntry {
+  result: AddressAnalysisResult;
+  cachedAt: number;
 }
 
 export class AddressCheckService {
@@ -58,6 +69,10 @@ export class AddressCheckService {
   private transactionAnalyzer: TransactionAnalyzer;
   private patternAnalyzer: PatternAnalyzer;
   private riskCalculator: RiskCalculator;
+  private counterpartyAnalysisCache = new Map<string, CounterpartyCacheEntry>();
+  private readonly counterpartyCacheTtlMs = 10 * 60 * 1000;
+  private readonly counterpartyCacheMaxSize = 1000;
+  private requestsSinceCacheCleanup = 0;
 
   constructor() {
     this.blockchainClient = BlockchainClientFactory.getClient(
@@ -69,6 +84,11 @@ export class AddressCheckService {
   }
 
   async analyzeAddress(address: string): Promise<AddressAnalysisResult> {
+    this.requestsSinceCacheCleanup++;
+    if (this.requestsSinceCacheCleanup % 100 === 0) {
+      this.cleanupCounterpartyCache();
+    }
+
     console.log(`[AddressCheck] Starting analysis for address: ${address}`);
     const startTime = Date.now();
 
@@ -125,6 +145,17 @@ export class AddressCheckService {
 
     if (hopLevel > MAX_HOP_LEVEL || visitedAddresses.has(address)) {
       return createSkipResult(address) as AddressAnalysisResult;
+    }
+
+    // Cache only non-root analyses to speed up repeated counterparty checks.
+    if (hopLevel > 0) {
+      const cached = this.counterpartyAnalysisCache.get(address);
+      if (
+        cached &&
+        Date.now() - cached.cachedAt < this.counterpartyCacheTtlMs
+      ) {
+        return cached.result;
+      }
     }
 
     visitedAddresses.add(address);
@@ -267,11 +298,45 @@ export class AddressCheckService {
       }),
     });
 
-    return {
+    const output: AddressAnalysisResult = {
       riskScore: cappedScore,
       flags: finalFlags,
       metadata,
     };
+
+    if (hopLevel > 0) {
+      this.counterpartyAnalysisCache.set(address, {
+        result: output,
+        cachedAt: Date.now(),
+      });
+      this.evictCounterpartyCacheIfNeeded();
+    }
+
+    return output;
+  }
+
+  private cleanupCounterpartyCache(): void {
+    const now = Date.now();
+    for (const [addr, entry] of this.counterpartyAnalysisCache.entries()) {
+      if (now - entry.cachedAt >= this.counterpartyCacheTtlMs) {
+        this.counterpartyAnalysisCache.delete(addr);
+      }
+    }
+  }
+
+  private evictCounterpartyCacheIfNeeded(): void {
+    if (this.counterpartyAnalysisCache.size <= this.counterpartyCacheMaxSize) {
+      return;
+    }
+    // Remove oldest entries until size is within limit.
+    const entries = Array.from(this.counterpartyAnalysisCache.entries()).sort(
+      (a, b) => a[1].cachedAt - b[1].cachedAt
+    );
+    const toRemove =
+      this.counterpartyAnalysisCache.size - this.counterpartyCacheMaxSize;
+    for (let i = 0; i < toRemove; i++) {
+      this.counterpartyAnalysisCache.delete(entries[i][0]);
+    }
   }
 
   private async resolveSecurityAndBlacklist(
@@ -338,6 +403,8 @@ export class AddressCheckService {
       checkedCounterparties: 0,
       analyzedCounterparties: 0,
       skippedVisited: 0,
+      counterpartyCacheHits: 0,
+      counterpartyCacheMisses: 0,
     };
     let taintScore = 0;
     let behavioralScore = 0;
@@ -375,7 +442,26 @@ export class AddressCheckService {
           taintCalculationStats.skippedVisited++;
           continue;
         }
+        const sharePercent =
+          totalVolume > 0 ? (incomingVolume / totalVolume) * 100 : 0;
+        if (
+          incomingVolume < MIN_TAINT_COUNTERPARTY_VOLUME &&
+          sharePercent < MIN_TAINT_VOLUME_SHARE_PERCENT
+        ) {
+          // Ignore dust/noise counterparties for taint stability.
+          continue;
+        }
         taintCalculationStats.analyzedCounterparties++;
+
+        const cached = this.counterpartyAnalysisCache.get(counterparty);
+        if (
+          cached &&
+          Date.now() - cached.cachedAt < this.counterpartyCacheTtlMs
+        ) {
+          taintCalculationStats.counterpartyCacheHits++;
+        } else {
+          taintCalculationStats.counterpartyCacheMisses++;
+        }
 
         const result = await this.analyzeAddressWithHops(
           counterparty,

@@ -62,6 +62,8 @@ export interface AddressAnalysisMetadata {
     checkedCounterparties: number;
     analyzedCounterparties: number;
     skippedVisited: number;
+    counterpartyCacheHits: number;
+    counterpartyCacheMisses: number;
   };
   /** Explainable score breakdown for debugging/auditing */
   scoreBreakdown?: {

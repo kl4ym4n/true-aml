@@ -1,4 +1,5 @@
 import { IBlockchainClient } from '../../lib/blockchain-client.interface';
+import { TAINT_STABLECOIN_SYMBOLS } from './address-check.constants';
 
 export interface Transaction {
   block_timestamp: number;
@@ -30,6 +31,11 @@ export interface Transaction {
  */
 export class TransactionAnalyzer {
   constructor(private blockchainClient: IBlockchainClient) {}
+
+  private isTaintStablecoin(symbol?: string): boolean {
+    if (!symbol) return false;
+    return TAINT_STABLECOIN_SYMBOLS.has(symbol.toUpperCase());
+  }
 
   private normalizeTokenAmount(
     amount: unknown,
@@ -152,6 +158,7 @@ export class TransactionAnalyzer {
           // Only TRC20: count when tokenInfo is present (token transfer); skip plain TRX
           const tokenInfo = tx.tokenInfo;
           if (!tokenInfo) continue;
+          if (!this.isTaintStablecoin(tokenInfo.symbol)) continue;
           const from = tx.from ?? '';
           const amount = this.normalizeTokenAmount(
             tx.amount,
