@@ -249,9 +249,7 @@ export class RiskCalculator {
 
       if (patterns.hasFastCashOut) {
         behaviorRisk += 25;
-        console.log(
-          `[RiskCalculator] Behavioral risk: +25 (hasFastCashOut)`
-        );
+        console.log(`[RiskCalculator] Behavioral risk: +25 (hasFastCashOut)`);
       }
 
       if (patterns.isFanIn) {

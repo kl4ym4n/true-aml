@@ -11,6 +11,37 @@ export interface AddressContext {
   liquidityEvents: LiquidityEvents | null;
 }
 
+type ClientWithContractInfo = IBlockchainClient & {
+  getContractInfo: (address: string) => Promise<ContractInfo | null>;
+};
+
+type ClientWithLiquidityEvents = IBlockchainClient & {
+  hasLiquidityPoolEvents: (
+    address: string,
+    limit?: number
+  ) => Promise<LiquidityEvents | null>;
+};
+
+function hasGetContractInfo(
+  client: IBlockchainClient
+): client is ClientWithContractInfo {
+  return (
+    'getContractInfo' in client &&
+    typeof (client as { getContractInfo?: unknown }).getContractInfo ===
+      'function'
+  );
+}
+
+function hasLiquidityPoolEvents(
+  client: IBlockchainClient
+): client is ClientWithLiquidityEvents {
+  return (
+    'hasLiquidityPoolEvents' in client &&
+    typeof (client as { hasLiquidityPoolEvents?: unknown })
+      .hasLiquidityPoolEvents === 'function'
+  );
+}
+
 /** Fetch address info, then contract info and liquidity events if address is a contract. */
 export async function fetchAddressContext(
   blockchainClient: IBlockchainClient,
@@ -30,21 +61,14 @@ export async function fetchAddressContext(
 
     if (isContract) {
       try {
-        if (
-          'getContractInfo' in blockchainClient &&
-          typeof (blockchainClient as any).getContractInfo === 'function'
-        ) {
-          contractInfo = (await (blockchainClient as any).getContractInfo(
-            address
-          )) as ContractInfo;
+        if (hasGetContractInfo(blockchainClient)) {
+          contractInfo = await blockchainClient.getContractInfo(address);
         }
-        if (
-          'hasLiquidityPoolEvents' in blockchainClient &&
-          typeof (blockchainClient as any).hasLiquidityPoolEvents === 'function'
-        ) {
-          liquidityEvents = (await (
-            blockchainClient as any
-          ).hasLiquidityPoolEvents(address, 50)) as LiquidityEvents;
+        if (hasLiquidityPoolEvents(blockchainClient)) {
+          liquidityEvents = await blockchainClient.hasLiquidityPoolEvents(
+            address,
+            50
+          );
         }
       } catch {
         // continue without contract/liquidity data

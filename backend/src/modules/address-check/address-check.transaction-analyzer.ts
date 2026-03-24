@@ -2,7 +2,17 @@ import { IBlockchainClient } from '../../lib/blockchain-client.interface';
 
 export interface Transaction {
   block_timestamp: number;
-  raw_data?: any;
+  raw_data?: {
+    contract?: Array<{
+      type?: string;
+      parameter?: {
+        value?: {
+          owner_address?: string;
+          to_address?: string;
+        };
+      };
+    }>;
+  };
   from?: string;
   to?: string;
   txID?: string;
@@ -73,21 +83,18 @@ export class TransactionAnalyzer {
         txID: tx.hash,
         from: tx.from,
         to: tx.to,
-        amount: this.normalizeTokenAmount(
-          (tx as any).amount,
-          (tx as any).tokenInfo?.decimals
-        ),
-        tokenInfo: (tx as any).tokenInfo,
+        amount: this.normalizeTokenAmount(tx.amount, tx.tokenInfo?.decimals),
+        tokenInfo: tx.tokenInfo,
       }));
 
       console.log(
         `[TransactionAnalyzer] Processed ${transactions.length} transactions`
       );
       return transactions;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle different error types
       if (error instanceof Error && 'statusCode' in error) {
-        const statusCode = (error as any).statusCode;
+        const statusCode = (error as { statusCode?: number }).statusCode;
 
         // 400/404 - Invalid address or no transactions (normal case)
         if (statusCode === 400 || statusCode === 404) {
@@ -116,30 +123,51 @@ export class TransactionAnalyzer {
   }> {
     const volumeByCounterparty = new Map<string, number>();
     let totalVolume = 0;
+    const seenTxIds = new Set<string>();
+    const pageLimit = 200;
+    const maxPages = 5;
     try {
-      const response = await this.blockchainClient.getTransactions(address, {
-        limit: 200,
-        only_to: true,
-      });
-      const list = response.data || [];
       const normalizedAddress = address.toLowerCase();
-      for (const tx of list) {
-        const to = (tx as any).to ?? '';
-        if (to.toLowerCase() !== normalizedAddress) continue;
-        // Only TRC20: count when tokenInfo is present (token transfer); skip plain TRX
-        const tokenInfo = (tx as any).tokenInfo;
-        if (!tokenInfo) continue;
-        const from = (tx as any).from ?? '';
-        const amount = this.normalizeTokenAmount(
-          (tx as any).amount,
-          tokenInfo?.decimals
-        );
-        if (amount <= 0) continue;
-        totalVolume += amount;
-        volumeByCounterparty.set(
-          from,
-          (volumeByCounterparty.get(from) ?? 0) + amount
-        );
+
+      for (let page = 0; page < maxPages; page++) {
+        const response = await this.blockchainClient.getTransactions(address, {
+          limit: pageLimit,
+          only_to: true,
+          start: page * pageLimit,
+        });
+        const list = response.data || [];
+        if (list.length === 0) break;
+
+        let newItemsInPage = 0;
+        for (const tx of list) {
+          const txId = tx.hash ?? '';
+          if (txId && seenTxIds.has(txId)) continue;
+          if (txId) {
+            seenTxIds.add(txId);
+            newItemsInPage++;
+          }
+
+          const to = tx.to ?? '';
+          if (to.toLowerCase() !== normalizedAddress) continue;
+          // Only TRC20: count when tokenInfo is present (token transfer); skip plain TRX
+          const tokenInfo = tx.tokenInfo;
+          if (!tokenInfo) continue;
+          const from = tx.from ?? '';
+          const amount = this.normalizeTokenAmount(
+            tx.amount,
+            tokenInfo.decimals
+          );
+          if (amount <= 0) continue;
+          totalVolume += amount;
+          volumeByCounterparty.set(
+            from,
+            (volumeByCounterparty.get(from) ?? 0) + amount
+          );
+        }
+
+        if (!response.hasMore) break;
+        // Safety break for providers that ignore "start" or return duplicates.
+        if (newItemsInPage === 0) break;
       }
     } catch {
       // return zeros
@@ -166,7 +194,7 @@ export class TransactionAnalyzer {
       }
 
       if (tx.raw_data?.contract) {
-        tx.raw_data.contract.forEach((contract: any) => {
+        tx.raw_data.contract.forEach(contract => {
           if (contract.type === 'TransferContract') {
             const param = contract.parameter?.value;
             if (

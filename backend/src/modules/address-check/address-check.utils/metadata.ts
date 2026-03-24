@@ -2,6 +2,7 @@ import type {
   AddressAnalysisMetadata,
   SourceBreakdown,
 } from '../address-check.types';
+import type { WhitelistLevel } from './whitelist';
 
 export interface BuildMetadataParams {
   address: string;
@@ -29,6 +30,15 @@ export interface BuildMetadataParams {
   totalIncomingVolume?: number;
   riskyIncomingVolume?: number;
   taintPercent?: number;
+  scoreBreakdown?: {
+    baseRiskScore: number;
+    taintScore: number;
+    behavioralScore: number;
+    volumeScore: number;
+    preWhitelistScore: number;
+    whitelistLevel?: WhitelistLevel;
+    postWhitelistScore: number;
+  };
 }
 
 /** Build AddressAnalysisMetadata from analysis results. */
@@ -50,6 +60,7 @@ export function buildAnalysisMetadata(
     totalIncomingVolume,
     riskyIncomingVolume,
     taintPercent,
+    scoreBreakdown,
   } = params;
 
   return {
@@ -67,5 +78,6 @@ export function buildAnalysisMetadata(
     ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
     ...(riskyIncomingVolume !== undefined && { riskyIncomingVolume }),
     ...(taintPercent !== undefined && { taintPercent }),
+    ...(scoreBreakdown !== undefined && { scoreBreakdown }),
   };
 }

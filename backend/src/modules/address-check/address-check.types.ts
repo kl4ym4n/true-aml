@@ -49,6 +49,16 @@ export interface AddressAnalysisMetadata {
   riskyIncomingVolume?: number;
   /** Percentage of incoming volume that is tainted */
   taintPercent?: number;
+  /** Explainable score breakdown for debugging/auditing */
+  scoreBreakdown?: {
+    baseRiskScore: number;
+    taintScore: number;
+    behavioralScore: number;
+    volumeScore: number;
+    preWhitelistScore: number;
+    whitelistLevel?: 'strong' | 'soft';
+    postWhitelistScore: number;
+  };
 }
 
 export interface AddressAnalysisResult {

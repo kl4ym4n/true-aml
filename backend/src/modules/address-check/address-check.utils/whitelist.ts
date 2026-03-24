@@ -33,8 +33,11 @@ const SOFT_WHITELIST = new Set<string>([]);
 
 export function getWhitelistLevel(address: string): WhitelistLevel | null {
   if (!address) return null;
-  if (STRONG_WHITELIST.has(address)) return 'strong';
-  if (SOFT_WHITELIST.has(address)) return 'soft';
+  if (STRONG_WHITELIST.has(address)) {
+    return 'strong';
+  }
+  if (SOFT_WHITELIST.has(address)) {
+    return 'soft';
+  }
   return null;
 }
-

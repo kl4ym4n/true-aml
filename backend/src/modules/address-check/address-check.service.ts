@@ -25,10 +25,19 @@ import {
   getVolumeScore,
   getFinalRiskScore,
   getWhitelistLevel,
+  WhitelistLevel,
 } from './address-check.utils';
 
 const MAX_HOP_LEVEL = 1;
 const MAX_COUNTERPARTIES_TAINT = 10;
+
+interface CachedSecurityData {
+  addressSecurity?: AddressSecurity | null;
+  blacklistEntry?: {
+    category?: string;
+    riskScore?: number;
+  } | null;
+}
 
 export class AddressCheckService {
   private blockchainClient: IBlockchainClient;
@@ -94,7 +103,7 @@ export class AddressCheckService {
     address: string,
     hopLevel: number,
     visitedAddresses: Set<string>,
-    cachedData?: { addressSecurity?: any; blacklistEntry?: any }
+    cachedData?: CachedSecurityData
   ): Promise<AddressAnalysisResult> {
     console.log(
       `[AddressCheck] Analyzing address at hop level ${hopLevel}: ${address}`
@@ -155,6 +164,9 @@ export class AddressCheckService {
       totalIncomingVolume,
       riskyIncomingVolume,
       taintPercent,
+      taintScore,
+      behavioralScore,
+      volumeScore,
     } = await this.runMultiHopIfNeeded(
       address,
       hopLevel,
@@ -182,6 +194,24 @@ export class AddressCheckService {
     const sourceBreakdown =
       hopLevel === 0 ? computeSourceBreakdown(hopEntityFlags) : undefined;
 
+    const finalFlags =
+      flagsFromOtherHops.length > 0
+        ? ([...new Set([...flags, ...flagsFromOtherHops])] as RiskFlag[])
+        : flags;
+
+    // Whitelist adjustments (only for the directly analyzed address)
+    let whitelistLevel: WhitelistLevel | undefined;
+    if (hopLevel === 0) {
+      const wl = getWhitelistLevel(address);
+      if (wl === 'strong') {
+        cappedScore = 0;
+        whitelistLevel = wl;
+      } else if (wl === 'soft') {
+        cappedScore = Math.round(cappedScore * 0.3 * 100) / 100;
+        whitelistLevel = wl;
+      }
+    }
+
     const metadata = buildAnalysisMetadata({
       address,
       isBlacklisted: isBlacklisted || addressSecurity?.isBlacklisted || false,
@@ -207,23 +237,17 @@ export class AddressCheckService {
         totalIncomingVolume,
         riskyIncomingVolume,
         taintPercent,
+        scoreBreakdown: {
+          baseRiskScore: Math.round(baseRiskScore * 100) / 100,
+          taintScore,
+          behavioralScore: Math.round(behavioralScore * 100) / 100,
+          volumeScore: Math.round(volumeScore * 100) / 100,
+          preWhitelistScore: Math.round(finalRiskScore * 100) / 100,
+          whitelistLevel,
+          postWhitelistScore: cappedScore,
+        },
       }),
     });
-
-    const finalFlags =
-      flagsFromOtherHops.length > 0
-        ? ([...new Set([...flags, ...flagsFromOtherHops])] as RiskFlag[])
-        : flags;
-
-    // Whitelist adjustments (only for the directly analyzed address)
-    if (hopLevel === 0) {
-      const wl = getWhitelistLevel(address);
-      if (wl === 'strong') {
-        cappedScore = 0;
-      } else if (wl === 'soft') {
-        cappedScore = Math.round(cappedScore * 0.3 * 100) / 100;
-      }
-    }
 
     return {
       riskScore: cappedScore,
@@ -235,10 +259,10 @@ export class AddressCheckService {
   private async resolveSecurityAndBlacklist(
     address: string,
     hopLevel: number,
-    cachedData?: { addressSecurity?: any; blacklistEntry?: any }
+    cachedData?: CachedSecurityData
   ): Promise<{
-    blacklistEntry: any;
-    addressSecurity: any;
+    blacklistEntry: CachedSecurityData['blacklistEntry'];
+    addressSecurity: AddressSecurity | null | undefined;
     isBlacklisted: boolean;
   }> {
     if (hopLevel === 0 && cachedData) {
@@ -278,6 +302,9 @@ export class AddressCheckService {
     totalIncomingVolume: number;
     riskyIncomingVolume: number;
     taintPercent: number;
+    taintScore: number;
+    behavioralScore: number;
+    volumeScore: number;
   }> {
     let finalRiskScore = baseRiskScore;
     const flagsFromOtherHops: RiskFlag[] = [];
@@ -285,6 +312,9 @@ export class AddressCheckService {
     let totalIncomingVolume = 0;
     let riskyIncomingVolume = 0;
     let taintPercent = 0;
+    let taintScore = 0;
+    let behavioralScore = 0;
+    let volumeScore = 0;
 
     if (hopLevel !== 0) {
       return {
@@ -294,6 +324,9 @@ export class AddressCheckService {
         totalIncomingVolume,
         riskyIncomingVolume,
         taintPercent,
+        taintScore,
+        behavioralScore,
+        volumeScore,
       };
     }
 
@@ -328,10 +361,10 @@ export class AddressCheckService {
           : 0;
     }
 
-    const taintScore = getTaintScore(taintPercent);
+    taintScore = getTaintScore(taintPercent);
     const directRisk = baseRiskScore;
-    const behavioralScore = getBehavioralScore(flags, flagsFromOtherHops);
-    const volumeScore = getVolumeScore(totalIncomingVolume);
+    behavioralScore = getBehavioralScore(flags, flagsFromOtherHops);
+    volumeScore = getVolumeScore(totalIncomingVolume);
     finalRiskScore = getFinalRiskScore(
       directRisk,
       taintScore,
@@ -346,6 +379,9 @@ export class AddressCheckService {
       totalIncomingVolume,
       riskyIncomingVolume,
       taintPercent,
+      taintScore,
+      behavioralScore,
+      volumeScore,
     };
   }
 }
