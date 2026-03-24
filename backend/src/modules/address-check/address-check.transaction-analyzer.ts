@@ -6,6 +6,13 @@ export interface Transaction {
   from?: string;
   to?: string;
   txID?: string;
+  amount?: number;
+  tokenInfo?: {
+    symbol: string;
+    address: string;
+    decimals: number;
+    name: string;
+  };
 }
 
 /**
@@ -13,6 +20,25 @@ export interface Transaction {
  */
 export class TransactionAnalyzer {
   constructor(private blockchainClient: IBlockchainClient) {}
+
+  private normalizeTokenAmount(
+    amount: unknown,
+    decimals?: number | null
+  ): number {
+    const rawStr = String(amount ?? '0');
+    const raw = parseFloat(rawStr);
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
+
+    // If value already looks like a decimal amount, keep as-is.
+    if (rawStr.includes('.')) return raw;
+
+    // If decimals provided and amount is integer-like, convert from base units.
+    if (typeof decimals === 'number' && decimals >= 0 && decimals <= 30) {
+      return raw / Math.pow(10, decimals);
+    }
+
+    return raw;
+  }
 
   /**
    * Fetch transactions for an address (both TRC-20 and regular TRX).
@@ -47,6 +73,11 @@ export class TransactionAnalyzer {
         txID: tx.hash,
         from: tx.from,
         to: tx.to,
+        amount: this.normalizeTokenAmount(
+          (tx as any).amount,
+          (tx as any).tokenInfo?.decimals
+        ),
+        tokenInfo: (tx as any).tokenInfo,
       }));
 
       console.log(
@@ -72,6 +103,48 @@ export class TransactionAnalyzer {
       // Return empty array to allow analysis to continue
       return [];
     }
+  }
+
+  /**
+   * Fetch incoming TRC20 volumes for an address: total volume and volume per sender (counterparty).
+   * Uses getTransactions (only_to) only; does not use getTRC20Transactions (not available in TronScan API).
+   * Counts only transfers that have tokenInfo (TRC20); ignores plain TRX transfers.
+   */
+  async fetchTRC20IncomingVolumes(address: string): Promise<{
+    totalVolume: number;
+    volumeByCounterparty: Map<string, number>;
+  }> {
+    const volumeByCounterparty = new Map<string, number>();
+    let totalVolume = 0;
+    try {
+      const response = await this.blockchainClient.getTransactions(address, {
+        limit: 200,
+        only_to: true,
+      });
+      const list = response.data || [];
+      const normalizedAddress = address.toLowerCase();
+      for (const tx of list) {
+        const to = (tx as any).to ?? '';
+        if (to.toLowerCase() !== normalizedAddress) continue;
+        // Only TRC20: count when tokenInfo is present (token transfer); skip plain TRX
+        const tokenInfo = (tx as any).tokenInfo;
+        if (!tokenInfo) continue;
+        const from = (tx as any).from ?? '';
+        const amount = this.normalizeTokenAmount(
+          (tx as any).amount,
+          tokenInfo?.decimals
+        );
+        if (amount <= 0) continue;
+        totalVolume += amount;
+        volumeByCounterparty.set(
+          from,
+          (volumeByCounterparty.get(from) ?? 0) + amount
+        );
+      }
+    } catch {
+      // return zeros
+    }
+    return { totalVolume, volumeByCounterparty };
   }
 
   /**

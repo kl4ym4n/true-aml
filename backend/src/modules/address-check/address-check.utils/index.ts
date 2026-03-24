@@ -19,3 +19,13 @@ export type { BuildMetadataParams } from './metadata';
 export { updateAddressProfile } from './profile';
 
 export { createSkipResult } from './skip-result';
+
+export {
+  getTaintScore,
+  getBehavioralScore,
+  getVolumeScore,
+  getFinalRiskScore,
+} from './score';
+
+export { getWhitelistLevel } from './whitelist';
+export type { WhitelistLevel } from './whitelist';

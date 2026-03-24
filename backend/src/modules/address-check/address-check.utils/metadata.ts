@@ -26,6 +26,9 @@ export interface BuildMetadataParams {
     tags: string[];
   };
   sourceBreakdown?: SourceBreakdown;
+  totalIncomingVolume?: number;
+  riskyIncomingVolume?: number;
+  taintPercent?: number;
 }
 
 /** Build AddressAnalysisMetadata from analysis results. */
@@ -44,6 +47,9 @@ export function buildAnalysisMetadata(
     liquidityPoolInteractions,
     addressSecurity,
     sourceBreakdown,
+    totalIncomingVolume,
+    riskyIncomingVolume,
+    taintPercent,
   } = params;
 
   return {
@@ -58,5 +64,8 @@ export function buildAnalysisMetadata(
     liquidityPoolInteractions,
     addressSecurity,
     ...(sourceBreakdown && { sourceBreakdown }),
+    ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
+    ...(riskyIncomingVolume !== undefined && { riskyIncomingVolume }),
+    ...(taintPercent !== undefined && { taintPercent }),
   };
 }

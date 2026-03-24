@@ -8,6 +8,12 @@ export interface TransactionPatterns {
   transactionTypes: string[];
   liquidityPoolInteractions: number;
   liquidityPoolAddresses: Set<string>;
+  totalIncoming: number;
+  totalOutgoing: number;
+  avgIncoming: number;
+  maxIncoming: number;
+  hasFastCashOut: boolean;
+  isFanIn: boolean;
 }
 
 export interface AddressInfo {
@@ -46,7 +52,8 @@ export class PatternAnalyzer {
     transactions: Transaction[],
     addressInfo?: AddressInfo | null,
     contractInfo?: ContractInfo | null,
-    liquidityEvents?: LiquidityEvents | null
+    liquidityEvents?: LiquidityEvents | null,
+    analyzedAddress?: string
   ): TransactionPatterns {
     console.log(`[PatternAnalyzer] Starting pattern analysis:`, {
       transactionCount: transactions.length,
@@ -63,13 +70,36 @@ export class PatternAnalyzer {
         transactionTypes: [],
         liquidityPoolInteractions: 0,
         liquidityPoolAddresses: new Set<string>(),
+        totalIncoming: 0,
+        totalOutgoing: 0,
+        avgIncoming: 0,
+        maxIncoming: 0,
+        hasFastCashOut: false,
+        isFanIn: false,
       };
     }
+
+    const subjectAddress =
+      (analyzedAddress ?? addressInfo?.address ?? '').toLowerCase();
 
     // Extract unique counterparties
     const counterparties = new Set<string>();
     const transactionTypes = new Set<string>();
     const liquidityPoolAddresses = new Set<string>();
+
+    let totalIncoming = 0;
+    let totalOutgoing = 0;
+    let incomingCount = 0;
+    let maxIncoming = 0;
+    const incomingSenders = new Set<string>();
+
+    // Fast cash-out heuristic: outgoing shortly after any incoming
+    const FAST_CASHOUT_WINDOW_MS = 10 * 60 * 1000;
+    const sortedByTime = [...transactions].sort(
+      (a, b) => (a.block_timestamp ?? 0) - (b.block_timestamp ?? 0)
+    );
+    let lastIncomingTs: number | null = null;
+    let hasFastCashOut = false;
 
     transactions.forEach(tx => {
       if (tx.from) {
@@ -77,6 +107,22 @@ export class PatternAnalyzer {
       }
       if (tx.to) {
         counterparties.add(tx.to);
+      }
+
+      // Volume features (TRC20 only: tokenInfo present)
+      const isTRC20 = !!(tx as any).tokenInfo;
+      const amt = (tx as any).amount ?? 0;
+      if (subjectAddress && isTRC20 && typeof amt === 'number' && amt > 0) {
+        const from = (tx as any).from?.toLowerCase?.() ?? '';
+        const to = (tx as any).to?.toLowerCase?.() ?? '';
+        if (to && to === subjectAddress) {
+          totalIncoming += amt;
+          incomingCount++;
+          maxIncoming = Math.max(maxIncoming, amt);
+          if (from) incomingSenders.add(from);
+        } else if (from && from === subjectAddress) {
+          totalOutgoing += amt;
+        }
       }
 
       // Check if transaction interacts with known liquidity pools
@@ -118,6 +164,34 @@ export class PatternAnalyzer {
         });
       }
     });
+
+    // Fast cash-out check using time-ordered tx list (TRC20 only).
+    if (subjectAddress) {
+      for (const tx of sortedByTime) {
+        const isTRC20 = !!(tx as any).tokenInfo;
+        const amt = (tx as any).amount ?? 0;
+        if (!isTRC20 || typeof amt !== 'number' || amt <= 0) continue;
+        const from = (tx as any).from?.toLowerCase?.() ?? '';
+        const to = (tx as any).to?.toLowerCase?.() ?? '';
+        const ts = (tx as any).block_timestamp ?? 0;
+        if (to && to === subjectAddress) {
+          lastIncomingTs = ts;
+        } else if (from && from === subjectAddress && lastIncomingTs) {
+          if (ts - lastIncomingTs <= FAST_CASHOUT_WINDOW_MS) {
+            hasFastCashOut = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Fan-in heuristic: many incoming senders, relatively little outgoing
+    const isFanIn =
+      incomingCount >= 10 &&
+      incomingSenders.size >= 5 &&
+      totalOutgoing > 0 &&
+      totalIncoming > 0 &&
+      totalOutgoing / totalIncoming <= 0.2;
 
     // They check: 1) known pool addresses, 2) swap operation patterns, 3) contract interactions
     // Count transactions that look like swap operations (TriggerSmartContract calls)
@@ -268,6 +342,12 @@ export class PatternAnalyzer {
       transactionTypes: Array.from(transactionTypes),
       liquidityPoolInteractions: liquidityPoolAddresses.size,
       liquidityPoolAddresses,
+      totalIncoming,
+      totalOutgoing,
+      avgIncoming: incomingCount > 0 ? totalIncoming / incomingCount : 0,
+      maxIncoming,
+      hasFastCashOut,
+      isFanIn,
     };
 
     console.log(`[PatternAnalyzer] Pattern analysis complete:`, {

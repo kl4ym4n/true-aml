@@ -43,6 +43,12 @@ export interface AddressAnalysisMetadata {
   };
   /** Breakdown of sources by category (trusted/suspicious/dangerous) with percentages */
   sourceBreakdown?: SourceBreakdown;
+  /** Total incoming TRC20 volume (token units) */
+  totalIncomingVolume?: number;
+  /** Incoming TRC20 volume from counterparties with risk score > 60 */
+  riskyIncomingVolume?: number;
+  /** Percentage of incoming volume that is tainted */
+  taintPercent?: number;
 }
 
 export interface AddressAnalysisResult {

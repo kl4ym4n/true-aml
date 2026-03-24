@@ -38,6 +38,13 @@ export const NEW_ADDRESS_DAYS_THRESHOLD = 30; // Address is "new" if less than 3
 export const LOW_ACTIVITY_TX_THRESHOLD = 5; // Low activity if less than 5 transactions
 export const LONG_HISTORY_DAYS = 365; // Long history = more than 1 year
 
+// Taint-based scoring (BitOK-style)
+export const RISKY_COUNTERPARTY_THRESHOLD = 60;
+export const WEIGHT_DIRECT_RISK = 0.5;
+export const WEIGHT_TAINT = 0.25;
+export const WEIGHT_BEHAVIORAL = 0.15;
+export const WEIGHT_VOLUME = 0.1;
+
 // Known TRON DeFi liquidity pool addresses (smart contracts)
 // These are addresses of DEX routers and liquidity pools that are commonly used
 // Note: This list should be maintained and updated regularly
