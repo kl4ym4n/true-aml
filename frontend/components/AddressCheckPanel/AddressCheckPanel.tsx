@@ -31,6 +31,7 @@ export default function AddressCheckPanel() {
     setAddressResult(null);
     try {
       const result = await api.checkAddress(addressInput.trim(), apiKey || undefined);
+      console.log(result)
       setAddressResult(result);
     } catch (err) {
       if (err instanceof ApiError) {

@@ -41,6 +41,7 @@ export interface AddressCheckResponse {
     addressAgeDays: number | null;
     firstSeenAt: string | null;
     sourceBreakdown?: SourceBreakdown;
+    allTrc20IncomingVolume?: number;
     totalIncomingVolume?: number;
     riskyIncomingVolume?: number;
     taintPercent?: number;

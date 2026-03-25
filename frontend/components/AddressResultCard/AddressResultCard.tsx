@@ -14,8 +14,10 @@ interface AddressResultCardProps {
 
 export default function AddressResultCard({ result }: AddressResultCardProps) {
   const { metadata } = result;
+
   const hasTaintData =
     metadata.taintPercent !== undefined ||
+    metadata.allTrc20IncomingVolume !== undefined ||
     metadata.totalIncomingVolume !== undefined ||
     metadata.riskyIncomingVolume !== undefined;
 
@@ -66,6 +68,9 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
         {hasTaintData && (
           <div className={styles.section}>
             <span className={styles.sectionTitle}>Taint Analysis</span>
+            <div className={styles.hint}>
+              Taint is computed from incoming USDT/USDC only. “All TRC20 Incoming” may be higher when funds arrive in other tokens.
+            </div>
             <div className={styles.kvGrid}>
               {metadata.taintPercent !== undefined && (
                 <div className={styles.kvRow}>
@@ -75,14 +80,20 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
               )}
               {metadata.totalIncomingVolume !== undefined && (
                 <div className={styles.kvRow}>
-                  <span>Total Incoming</span>
+                  <span>Stablecoin Incoming (USDT/USDC)</span>
                   <strong>{metadata.totalIncomingVolume.toFixed(2)}</strong>
                 </div>
               )}
               {metadata.riskyIncomingVolume !== undefined && (
                 <div className={styles.kvRow}>
-                  <span>Risky Incoming</span>
+                  <span>Risky Stablecoin Incoming</span>
                   <strong>{metadata.riskyIncomingVolume.toFixed(2)}</strong>
+                </div>
+              )}
+              {metadata.allTrc20IncomingVolume !== undefined && (
+                <div className={styles.kvRow}>
+                  <span>All TRC20 Incoming</span>
+                  <strong>{metadata.allTrc20IncomingVolume.toFixed(2)}</strong>
                 </div>
               )}
             </div>

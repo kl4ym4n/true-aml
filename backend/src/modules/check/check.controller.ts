@@ -28,20 +28,50 @@ export const checkAddress = async (
             ? 'MEDIUM'
             : 'LOW';
 
+    const { metadata } = result;
+
     res.status(200).json({
       success: true,
       data: {
-        address: result.metadata.address,
+        address: metadata.address,
         riskScore: result.riskScore,
         riskLevel,
         flags: result.flags,
         metadata: {
-          isBlacklisted: result.metadata.isBlacklisted,
-          blacklistCategory: result.metadata.blacklistCategory,
-          transactionCount: result.metadata.transactionCount,
-          addressAgeDays: result.metadata.addressAgeDays,
-          firstSeenAt: result.metadata.firstSeenAt?.toISOString() || null,
-          sourceBreakdown: result.metadata.sourceBreakdown ?? undefined,
+          isBlacklisted: metadata.isBlacklisted,
+          blacklistCategory: metadata.blacklistCategory,
+          blacklistRiskScore: metadata.blacklistRiskScore,
+          transactionCount: metadata.transactionCount,
+          addressAgeDays: metadata.addressAgeDays,
+          firstSeenAt: metadata.firstSeenAt?.toISOString() || null,
+          sourceBreakdown: metadata.sourceBreakdown ?? undefined,
+          ...(metadata.allTrc20IncomingVolume !== undefined && {
+            allTrc20IncomingVolume: metadata.allTrc20IncomingVolume,
+          }),
+          ...(metadata.totalIncomingVolume !== undefined && {
+            totalIncomingVolume: metadata.totalIncomingVolume,
+          }),
+          ...(metadata.riskyIncomingVolume !== undefined && {
+            riskyIncomingVolume: metadata.riskyIncomingVolume,
+          }),
+          ...(metadata.taintPercent !== undefined && {
+            taintPercent: metadata.taintPercent,
+          }),
+          ...(metadata.topRiskyCounterparties !== undefined && {
+            topRiskyCounterparties: metadata.topRiskyCounterparties,
+          }),
+          ...(metadata.taintCalculationStats !== undefined && {
+            taintCalculationStats: metadata.taintCalculationStats,
+          }),
+          ...(metadata.scoreBreakdown !== undefined && {
+            scoreBreakdown: metadata.scoreBreakdown,
+          }),
+          ...(metadata.addressSecurity !== undefined && {
+            addressSecurity: metadata.addressSecurity,
+          }),
+          ...(metadata.liquidityPoolInteractions !== undefined && {
+            liquidityPoolInteractions: metadata.liquidityPoolInteractions,
+          }),
         },
       },
     });

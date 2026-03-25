@@ -282,6 +282,7 @@ export class AddressCheckService {
         : undefined,
       sourceBreakdown,
       ...(hopLevel === 0 && {
+        allTrc20IncomingVolume: patterns.totalIncoming,
         totalIncomingVolume,
         riskyIncomingVolume,
         taintPercent,
@@ -431,6 +432,12 @@ export class AddressCheckService {
     const { totalVolume, volumeByCounterparty } =
       await this.transactionAnalyzer.fetchTRC20IncomingVolumes(address);
     totalIncomingVolume = totalVolume;
+
+    console.log(`[AddressCheck] Taint input (USDT/USDC only):`, {
+      address,
+      stablecoinIncomingTotal: totalVolume,
+      counterpartyCount: volumeByCounterparty.size,
+    });
 
     if (totalVolume > 0 && volumeByCounterparty.size > 0) {
       const sorted = Array.from(volumeByCounterparty.entries())

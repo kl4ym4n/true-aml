@@ -27,6 +27,7 @@ export interface BuildMetadataParams {
     tags: string[];
   };
   sourceBreakdown?: SourceBreakdown;
+  allTrc20IncomingVolume?: number;
   totalIncomingVolume?: number;
   riskyIncomingVolume?: number;
   taintPercent?: number;
@@ -72,6 +73,7 @@ export function buildAnalysisMetadata(
     liquidityPoolInteractions,
     addressSecurity,
     sourceBreakdown,
+    allTrc20IncomingVolume,
     totalIncomingVolume,
     riskyIncomingVolume,
     taintPercent,
@@ -92,6 +94,7 @@ export function buildAnalysisMetadata(
     liquidityPoolInteractions,
     addressSecurity,
     ...(sourceBreakdown && { sourceBreakdown }),
+    ...(allTrc20IncomingVolume !== undefined && { allTrc20IncomingVolume }),
     ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
     ...(riskyIncomingVolume !== undefined && { riskyIncomingVolume }),
     ...(taintPercent !== undefined && { taintPercent }),

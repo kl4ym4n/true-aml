@@ -80,6 +80,12 @@
   letter-spacing: 0.5px;
 }
 
+.hint {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  line-height: 1.25rem;
+}
+
 .kvGrid {
   display: grid;
   grid-template-columns: 1fr;
