@@ -39,6 +39,10 @@ type TestableService = {
     fetchTRC20IncomingVolumes: (address: string) => Promise<{
       totalVolume: number;
       volumeByCounterparty: Map<string, number>;
+      pagesFetched: number;
+      scannedTxCount: number;
+      stablecoinTxCount: number;
+      truncated: boolean;
     }>;
   };
   analyzeAddressWithHops: (
@@ -77,6 +81,10 @@ async function testCounterpartyCacheHitMissStats(): Promise<void> {
       ['CP1', 60],
       ['CP2', 40],
     ]),
+    pagesFetched: 1,
+    scannedTxCount: 2,
+    stablecoinTxCount: 2,
+    truncated: false,
   });
   service.analyzeAddressWithHops = async (addr: string) => ({
     riskScore: addr === 'CP1' ? 80 : 20,
@@ -107,6 +115,10 @@ async function testDustCounterpartiesDoNotAffectTaint(): Promise<void> {
       ['DUST1', 0.001],
       ['DUST2', 0.005],
     ]),
+    pagesFetched: 1,
+    scannedTxCount: 2,
+    stablecoinTxCount: 2,
+    truncated: false,
   });
   service.analyzeAddressWithHops = async () => ({
     riskScore: 95,
@@ -140,6 +152,10 @@ async function testVisitedCounterpartiesAreSkipped(): Promise<void> {
       ['VISITED_CP', 90],
       ['CP2', 10],
     ]),
+    pagesFetched: 1,
+    scannedTxCount: 2,
+    stablecoinTxCount: 2,
+    truncated: false,
   });
   service.analyzeAddressWithHops = async (addr: string) => ({
     riskScore: addr === 'CP2' ? 70 : 10,

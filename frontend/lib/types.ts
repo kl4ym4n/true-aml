@@ -60,6 +60,13 @@ export interface AddressCheckResponse {
     sourceBreakdown?: SourceBreakdown;
     allTrc20IncomingVolume?: number;
     totalIncomingVolume?: number;
+    taintInput?: {
+      symbols: string[];
+      pagesFetched: number;
+      scannedTxCount: number;
+      stablecoinTxCount: number;
+      truncated: boolean;
+    };
     riskyIncomingVolume?: number;
     taintPercent?: number;
     topRiskyCounterparties?: Array<{

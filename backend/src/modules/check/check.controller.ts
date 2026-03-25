@@ -51,6 +51,9 @@ export const checkAddress = async (
           ...(metadata.totalIncomingVolume !== undefined && {
             totalIncomingVolume: metadata.totalIncomingVolume,
           }),
+          ...(metadata.taintInput !== undefined && {
+            taintInput: metadata.taintInput,
+          }),
           ...(metadata.riskyIncomingVolume !== undefined && {
             riskyIncomingVolume: metadata.riskyIncomingVolume,
           }),

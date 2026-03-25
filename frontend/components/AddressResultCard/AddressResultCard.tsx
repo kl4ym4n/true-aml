@@ -102,6 +102,15 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
                   <strong>{metadata.allTrc20IncomingVolume.toFixed(2)}</strong>
                 </div>
               )}
+              {metadata.taintInput && (
+                <div className={styles.kvRow}>
+                  <span>Taint Scan</span>
+                  <strong>
+                    {metadata.taintInput.pagesFetched}p / {metadata.taintInput.stablecoinTxCount} stablecoin tx
+                    {metadata.taintInput.truncated ? ' (truncated)' : ''}
+                  </strong>
+                </div>
+              )}
             </div>
           </div>
         )}

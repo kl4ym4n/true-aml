@@ -5,7 +5,6 @@ import { env } from '../../config/env';
 import prisma from '../../config/database';
 import type { AddressAnalysisResult, RiskFlag } from './address-check.types';
 import {
-  RISKY_COUNTERPARTY_THRESHOLD,
   MIN_TAINT_COUNTERPARTY_VOLUME,
   MIN_TAINT_VOLUME_SHARE_PERCENT,
 } from './address-check.constants';
@@ -208,6 +207,7 @@ export class AddressCheckService {
       flagsFromOtherHops,
       hopEntityFlags,
       totalIncomingVolume,
+      taintInput,
       riskyIncomingVolume,
       taintPercent,
       topRiskyCounterparties,
@@ -284,6 +284,7 @@ export class AddressCheckService {
       ...(hopLevel === 0 && {
         allTrc20IncomingVolume: patterns.totalIncoming,
         totalIncomingVolume,
+        taintInput,
         riskyIncomingVolume,
         taintPercent,
         topRiskyCounterparties,
@@ -392,6 +393,13 @@ export class AddressCheckService {
     taintScore: number;
     behavioralScore: number;
     volumeScore: number;
+    taintInput: {
+      symbols: string[];
+      pagesFetched: number;
+      scannedTxCount: number;
+      stablecoinTxCount: number;
+      truncated: boolean;
+    };
   }> {
     let finalRiskScore = baseRiskScore;
     const flagsFromOtherHops: RiskFlag[] = [];
@@ -412,6 +420,13 @@ export class AddressCheckService {
     let taintScore = 0;
     let behavioralScore = 0;
     let volumeScore = 0;
+    let taintInput = {
+      symbols: ['USDT', 'USDC'],
+      pagesFetched: 0,
+      scannedTxCount: 0,
+      stablecoinTxCount: 0,
+      truncated: false,
+    };
 
     if (hopLevel !== 0) {
       return {
@@ -426,17 +441,35 @@ export class AddressCheckService {
         taintScore,
         behavioralScore,
         volumeScore,
+        taintInput,
       };
     }
 
-    const { totalVolume, volumeByCounterparty } =
-      await this.transactionAnalyzer.fetchTRC20IncomingVolumes(address);
+    const {
+      totalVolume,
+      volumeByCounterparty,
+      pagesFetched,
+      scannedTxCount,
+      stablecoinTxCount,
+      truncated,
+    } = await this.transactionAnalyzer.fetchTRC20IncomingVolumes(address);
     totalIncomingVolume = totalVolume;
+    taintInput = {
+      symbols: ['USDT', 'USDC'],
+      pagesFetched,
+      scannedTxCount,
+      stablecoinTxCount,
+      truncated,
+    };
 
     console.log(`[AddressCheck] Taint input (USDT/USDC only):`, {
       address,
       stablecoinIncomingTotal: totalVolume,
       counterpartyCount: volumeByCounterparty.size,
+      pagesFetched,
+      scannedTxCount,
+      stablecoinTxCount,
+      truncated,
     });
 
     if (totalVolume > 0 && volumeByCounterparty.size > 0) {
@@ -481,7 +514,14 @@ export class AddressCheckService {
         flagsFromOtherHops.push(...result.flags);
         hopEntityFlags.push(result.flags);
 
-        const isRisky = result.riskScore > RISKY_COUNTERPARTY_THRESHOLD;
+        // For taint, prefer "source/entity risk" signals over the full score,
+        // to avoid marking counterparties as taint-risky due to volume/behavior alone.
+        const isRisky =
+          (result as AddressAnalysisResult).metadata?.isBlacklisted ||
+          result.flags.includes('blacklisted') ||
+          result.flags.includes('scam') ||
+          result.flags.includes('phishing') ||
+          result.flags.includes('malicious');
         topRiskyCounterparties.push({
           address: counterparty,
           incomingVolume: Math.round(incomingVolume * 100) / 100,
@@ -523,6 +563,7 @@ export class AddressCheckService {
       taintScore,
       behavioralScore,
       volumeScore,
+      taintInput,
     };
   }
 }

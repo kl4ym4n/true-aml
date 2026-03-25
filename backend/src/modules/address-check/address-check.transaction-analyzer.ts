@@ -126,12 +126,20 @@ export class TransactionAnalyzer {
   async fetchTRC20IncomingVolumes(address: string): Promise<{
     totalVolume: number;
     volumeByCounterparty: Map<string, number>;
+    pagesFetched: number;
+    scannedTxCount: number;
+    stablecoinTxCount: number;
+    truncated: boolean;
   }> {
     const volumeByCounterparty = new Map<string, number>();
     let totalVolume = 0;
     const seenTxIds = new Set<string>();
     const pageLimit = 200;
     const maxPages = 5;
+    let pagesFetched = 0;
+    let scannedTxCount = 0;
+    let stablecoinTxCount = 0;
+    let truncated = false;
     try {
       const normalizedAddress = address.toLowerCase();
 
@@ -143,6 +151,8 @@ export class TransactionAnalyzer {
         });
         const list = response.data || [];
         if (list.length === 0) break;
+        pagesFetched++;
+        scannedTxCount += list.length;
 
         let newItemsInPage = 0;
         for (const tx of list) {
@@ -159,6 +169,7 @@ export class TransactionAnalyzer {
           const tokenInfo = tx.tokenInfo;
           if (!tokenInfo) continue;
           if (!this.isTaintStablecoin(tokenInfo.symbol)) continue;
+          stablecoinTxCount++;
           const from = tx.from ?? '';
           const amount = this.normalizeTokenAmount(
             tx.amount,
@@ -176,10 +187,18 @@ export class TransactionAnalyzer {
         // Safety break for providers that ignore "start" or return duplicates.
         if (newItemsInPage === 0) break;
       }
+      truncated = pagesFetched >= maxPages;
     } catch {
       // return zeros
     }
-    return { totalVolume, volumeByCounterparty };
+    return {
+      totalVolume,
+      volumeByCounterparty,
+      pagesFetched,
+      scannedTxCount,
+      stablecoinTxCount,
+      truncated,
+    };
   }
 
   /**

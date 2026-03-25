@@ -29,6 +29,13 @@ export interface BuildMetadataParams {
   sourceBreakdown?: SourceBreakdown;
   allTrc20IncomingVolume?: number;
   totalIncomingVolume?: number;
+  taintInput?: {
+    symbols: string[];
+    pagesFetched: number;
+    scannedTxCount: number;
+    stablecoinTxCount: number;
+    truncated: boolean;
+  };
   riskyIncomingVolume?: number;
   taintPercent?: number;
   topRiskyCounterparties?: Array<{
@@ -75,6 +82,7 @@ export function buildAnalysisMetadata(
     sourceBreakdown,
     allTrc20IncomingVolume,
     totalIncomingVolume,
+    taintInput,
     riskyIncomingVolume,
     taintPercent,
     topRiskyCounterparties,
@@ -96,6 +104,7 @@ export function buildAnalysisMetadata(
     ...(sourceBreakdown && { sourceBreakdown }),
     ...(allTrc20IncomingVolume !== undefined && { allTrc20IncomingVolume }),
     ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
+    ...(taintInput !== undefined && { taintInput }),
     ...(riskyIncomingVolume !== undefined && { riskyIncomingVolume }),
     ...(taintPercent !== undefined && { taintPercent }),
     ...(topRiskyCounterparties !== undefined && { topRiskyCounterparties }),

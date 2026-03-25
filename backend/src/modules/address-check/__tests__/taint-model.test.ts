@@ -125,6 +125,9 @@ async function testIncomingVolumePagination(): Promise<void> {
   // Non-stable token (TRX) should not be included in taint volume
   assert.equal(result.volumeByCounterparty.has('C'), false);
   assert.equal(calls, 2);
+  assert.equal(result.pagesFetched, 2);
+  assert.equal(result.scannedTxCount, 4);
+  assert.equal(result.stablecoinTxCount, 3);
 }
 
 async function run(): Promise<void> {

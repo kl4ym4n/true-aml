@@ -47,6 +47,14 @@ export interface AddressAnalysisMetadata {
   allTrc20IncomingVolume?: number;
   /** Total incoming TRC20 volume (token units) */
   totalIncomingVolume?: number;
+  /** Details about what the taint model scanned and how it was computed */
+  taintInput?: {
+    symbols: string[];
+    pagesFetched: number;
+    scannedTxCount: number;
+    stablecoinTxCount: number;
+    truncated: boolean;
+  };
   /** Incoming TRC20 volume from counterparties with risk score > 60 */
   riskyIncomingVolume?: number;
   /** Percentage of incoming volume that is tainted */
