@@ -41,6 +41,12 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
           <span className={styles.label}>Risk Level</span>
           <RiskBadge level={toUppercaseRiskLevel(result.riskLevel)} />
         </div>
+        {metadata.addressSecurity?.riskLevel && (
+          <div className={styles.resultItem}>
+            <span className={styles.label}>Security Provider Level</span>
+            <span className={styles.value}>{metadata.addressSecurity.riskLevel}</span>
+          </div>
+        )}
         {result.flags.length > 0 && (
           <div className={styles.resultItem}>
             <span className={styles.label}>Flags</span>
