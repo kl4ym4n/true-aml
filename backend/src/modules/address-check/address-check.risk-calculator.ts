@@ -181,6 +181,21 @@ export class RiskCalculator {
         `[RiskCalculator] Direct risk: +${DIRECT_RISK_SCAM_MIXER} (malicious)`
       );
     }
+
+    // Volume-based direct risk (incoming TRC20 volume heuristics)
+    if (patterns?.totalIncoming) {
+      if (patterns.totalIncoming > 1_000_000) {
+        directRisk += 25;
+        console.log(
+          `[RiskCalculator] Direct risk: +25 (totalIncoming > 1M: ${patterns.totalIncoming})`
+        );
+      } else if (patterns.totalIncoming > 100_000) {
+        directRisk += 15;
+        console.log(
+          `[RiskCalculator] Direct risk: +15 (totalIncoming > 100k: ${patterns.totalIncoming})`
+        );
+      }
+    }
     console.log(`[RiskCalculator] Direct risk total: ${directRisk}`);
 
     // Calculate indirect risk (via 1-2 hops)
@@ -230,6 +245,16 @@ export class RiskCalculator {
         console.log(
           `[RiskCalculator] Behavioral risk: +${BEHAVIOR_RISK_FAST_WITHDRAWAL} (fast withdrawal)`
         );
+      }
+
+      if (patterns.hasFastCashOut) {
+        behaviorRisk += 25;
+        console.log(`[RiskCalculator] Behavioral risk: +25 (hasFastCashOut)`);
+      }
+
+      if (patterns.isFanIn) {
+        behaviorRisk += 20;
+        console.log(`[RiskCalculator] Behavioral risk: +20 (isFanIn)`);
       }
       // This is a strong indicator of potential money laundering through DeFi
       if (patterns.liquidityPoolInteractions > 0) {

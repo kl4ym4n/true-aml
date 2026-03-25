@@ -1,7 +1,9 @@
 // API Response Types
 
-export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+export type RiskLevelLowercase = 'low' | 'medium' | 'high' | 'critical';
 export type RiskLevelUppercase = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+// Backend currently returns uppercase; keep lowercase for backwards compatibility.
+export type RiskLevel = RiskLevelLowercase | RiskLevelUppercase;
 
 // API Error response format
 export interface ApiErrorResponse {
@@ -37,10 +39,60 @@ export interface AddressCheckResponse {
   flags: string[];
   metadata: {
     isBlacklisted: boolean;
+    blacklistCategory?: string;
+    blacklistRiskScore?: number;
     transactionCount: number;
     addressAgeDays: number | null;
     firstSeenAt: string | null;
+    addressSecurity?: {
+      riskScore: number;
+      riskLevel: string;
+      isScam: boolean;
+      isPhishing?: boolean;
+      isMalicious: boolean;
+      tags: string[];
+    };
+    liquidityPoolInteractions?: {
+      count: number;
+      percentage: number;
+      addresses: string[];
+    };
     sourceBreakdown?: SourceBreakdown;
+    allTrc20IncomingVolume?: number;
+    totalIncomingVolume?: number;
+    taintInput?: {
+      symbols: string[];
+      pagesFetched: number;
+      scannedTxCount: number;
+      stablecoinTxCount: number;
+      truncated: boolean;
+    };
+    riskyIncomingVolume?: number;
+    taintPercent?: number;
+    topRiskyCounterparties?: Array<{
+      address: string;
+      incomingVolume: number;
+      riskScore: number;
+      risky: boolean;
+    }>;
+    taintCalculationStats?: {
+      maxConsidered: number;
+      checkedCounterparties: number;
+      analyzedCounterparties: number;
+      skippedVisited: number;
+      skippedDust?: number;
+      counterpartyCacheHits?: number;
+      counterpartyCacheMisses?: number;
+    };
+    scoreBreakdown?: {
+      baseRiskScore: number;
+      taintScore: number;
+      behavioralScore: number;
+      volumeScore: number;
+      preWhitelistScore: number;
+      whitelistLevel?: 'strong' | 'soft';
+      postWhitelistScore: number;
+    };
   };
 }
 
@@ -78,8 +130,8 @@ export interface TransactionCheckResponse {
   };
 }
 
-// Helper function to convert lowercase risk level to uppercase for display
+// Helper function to convert risk level to uppercase for display
 export function toUppercaseRiskLevel(level: RiskLevel): RiskLevelUppercase {
-  return level.toUpperCase() as RiskLevelUppercase;
+  return String(level).toUpperCase() as RiskLevelUppercase;
 }
 
