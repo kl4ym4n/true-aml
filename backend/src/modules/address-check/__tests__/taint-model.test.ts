@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import type { IBlockchainClient } from '../../../lib/blockchain-client.interface';
 import { TransactionAnalyzer } from '../address-check.transaction-analyzer';
-import { getFinalRiskScore, getTaintScore } from '../address-check.utils/score';
-import { getWhitelistLevel } from '../address-check.utils/whitelist';
+import { getFinalRiskScore, getTaintScore } from '../address-check.utils';
+import { getWhitelistLevel } from '../address-check.utils';
 
 async function testTaintBuckets(): Promise<void> {
   assert.equal(getTaintScore(0), 0);
