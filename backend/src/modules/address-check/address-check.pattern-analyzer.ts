@@ -135,7 +135,7 @@ export class PatternAnalyzer {
       // Volume features (TRC20 only: tokenInfo present)
       const isTRC20 = !!tx.tokenInfo;
       const amt = tx.amount ?? 0;
-      if (subjectAddress && isTRC20 && typeof amt === 'number' && amt > 0) {
+      if (subjectAddress && isTRC20 && amt > 0) {
         const from = tx.from?.toLowerCase?.() ?? '';
         const to = tx.to?.toLowerCase?.() ?? '';
         if (to && to === subjectAddress) {
@@ -209,7 +209,7 @@ export class PatternAnalyzer {
       for (const tx of sortedByTime) {
         const isTRC20 = !!tx.tokenInfo;
         const amt = tx.amount ?? 0;
-        if (!isTRC20 || typeof amt !== 'number' || amt <= 0) continue;
+        if (!isTRC20 || amt <= 0) continue;
         const from = tx.from?.toLowerCase?.() ?? '';
         const to = tx.to?.toLowerCase?.() ?? '';
         const ts = tx.block_timestamp ?? 0;
