@@ -43,7 +43,10 @@ export interface BuildMetadataParams {
     incomingVolume: number;
     riskScore: number;
     risky: boolean;
+    entityType?: string;
+    hopLevel?: number;
   }>;
+  explanation?: string[];
   taintCalculationStats?: {
     maxConsidered: number;
     checkedCounterparties: number;
@@ -88,6 +91,7 @@ export function buildAnalysisMetadata(
     topRiskyCounterparties,
     taintCalculationStats,
     scoreBreakdown,
+    explanation,
   } = params;
 
   return {
@@ -110,5 +114,6 @@ export function buildAnalysisMetadata(
     ...(topRiskyCounterparties !== undefined && { topRiskyCounterparties }),
     ...(taintCalculationStats !== undefined && { taintCalculationStats }),
     ...(scoreBreakdown !== undefined && { scoreBreakdown }),
+    ...(explanation !== undefined && explanation.length > 0 && { explanation }),
   };
 }

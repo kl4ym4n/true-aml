@@ -1,6 +1,10 @@
 import { IBlockchainClient } from '../../lib/blockchain-client.interface';
 import { TAINT_STABLECOIN_SYMBOLS } from './address-check.constants';
 
+/**
+ * Normalized transaction row used by analyzers. Provider payloads are mapped in
+ * `IBlockchainClient`; see `chain-transaction.types.ts` for a chain-agnostic view.
+ */
 export interface Transaction {
   block_timestamp: number;
   raw_data?: {
@@ -270,5 +274,15 @@ export class TransactionAnalyzer {
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  }
+
+  /** Days since the most recent transaction (for taint time decay). */
+  static lastActivityDaysFromTransactions(transactions: Transaction[]): number {
+    const timestamps = transactions
+      .map(tx => tx.block_timestamp)
+      .filter((ts): ts is number => ts > 0);
+    if (timestamps.length === 0) return 365;
+    const latest = Math.max(...timestamps);
+    return (Date.now() - latest) / (1000 * 60 * 60 * 24);
   }
 }

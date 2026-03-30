@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import type { IBlockchainClient } from '../../../lib/blockchain-client.interface';
 import { TransactionAnalyzer } from '../address-check.transaction-analyzer';
-import { getFinalRiskScore, getTaintScore } from '../address-check.utils';
-import { getWhitelistLevel } from '../address-check.utils';
+import {
+  getFinalRiskScore,
+  getTaintScore,
+  getWhitelistLevel,
+  AdvancedRiskCalculator,
+} from '../address-check.utils';
 
 async function testTaintBuckets(): Promise<void> {
   assert.equal(getTaintScore(0), 0);
@@ -16,6 +20,19 @@ async function testFinalScoreFormula(): Promise<void> {
   const score = getFinalRiskScore(80, 40, 20, 10);
   // 80*0.5 + 40*0.25 + 20*0.15 + 10*0.10 = 54
   assert.equal(score, 54);
+}
+
+async function testAdvancedRiskCalculatorBlend(): Promise<void> {
+  const calc = new AdvancedRiskCalculator();
+  const r = calc.calculate({
+    baseRisk: 40,
+    taintScore: 30,
+    behavioralScore: 20,
+    volumeScore: 10,
+  });
+  assert.equal(r.score, 28.5);
+  assert.equal(r.breakdown.baseRisk, 40);
+  assert.ok(r.explanation.length > 0);
 }
 
 async function testWhitelist(): Promise<void> {
@@ -133,6 +150,7 @@ async function testIncomingVolumePagination(): Promise<void> {
 async function run(): Promise<void> {
   await testTaintBuckets();
   await testFinalScoreFormula();
+  await testAdvancedRiskCalculatorBlend();
   await testWhitelist();
   await testIncomingVolumePagination();
   // eslint-disable-next-line no-console

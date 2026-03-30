@@ -115,6 +115,17 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
           </div>
         )}
 
+        {metadata.explanation && metadata.explanation.length > 0 && (
+          <div className={styles.section}>
+            <span className={styles.sectionTitle}>AML Explanation</span>
+            <ul className={styles.explanationList}>
+              {metadata.explanation.map((line, idx) => (
+                <li key={idx}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {metadata.scoreBreakdown && (
           <div className={styles.section}>
             <span className={styles.sectionTitle}>Score Breakdown</span>
@@ -164,6 +175,7 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
                       <th>Address</th>
                       <th>Volume</th>
                       <th>Score</th>
+                      <th>Entity</th>
                       <th>Risky</th>
                     </tr>
                   </thead>
@@ -173,6 +185,7 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
                         <td className={styles.mono}>{cp.address}</td>
                         <td>{cp.incomingVolume.toFixed(2)}</td>
                         <td>{cp.riskScore.toFixed(2)}</td>
+                        <td>{cp.entityType ?? '—'}</td>
                         <td>
                           <span className={cp.risky ? styles.badgeRisky : styles.badgeSafe}>
                             {cp.risky ? 'Yes' : 'No'}

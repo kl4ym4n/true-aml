@@ -1,5 +1,26 @@
 import assert from 'node:assert/strict';
 import type { RiskFlag } from '../address-check.types';
+import type { TransactionPatterns } from '../address-check.pattern-analyzer';
+
+const minimalPatterns: TransactionPatterns = {
+  uniqueCounterparties: 2,
+  averageTimeBetweenTx: null,
+  hasHighFrequency: false,
+  hasHighVelocity: false,
+  transactionTypes: [],
+  liquidityPoolInteractions: 0,
+  liquidityPoolAddresses: new Set(),
+  totalIncoming: 100,
+  totalOutgoing: 0,
+  avgIncoming: 50,
+  maxIncoming: 60,
+  hasFastCashOut: false,
+  isFanIn: false,
+  isFanOut: false,
+  hasLoopingFunds: false,
+  repeatedInteractionScore: 0,
+  swapLikeRatio: 0,
+};
 
 type TestableService = {
   runMultiHopIfNeeded: (
@@ -8,7 +29,8 @@ type TestableService = {
     baseRiskScore: number,
     transactions: unknown[],
     visitedAddresses: Set<string>,
-    flags: RiskFlag[]
+    flags: RiskFlag[],
+    patterns: TransactionPatterns
   ) => Promise<{
     finalRiskScore: number;
     flagsFromOtherHops: RiskFlag[];
@@ -34,8 +56,20 @@ type TestableService = {
     taintScore: number;
     behavioralScore: number;
     volumeScore: number;
+    taintInput: {
+      symbols: string[];
+      pagesFetched: number;
+      scannedTxCount: number;
+      stablecoinTxCount: number;
+      truncated: boolean;
+    };
+    explanation: string[];
   }>;
   transactionAnalyzer: {
+    fetchAddressTransactions: (
+      address: string,
+      opts?: unknown
+    ) => Promise<unknown[]>;
     fetchTRC20IncomingVolumes: (address: string) => Promise<{
       totalVolume: number;
       volumeByCounterparty: Map<string, number>;
@@ -49,18 +83,13 @@ type TestableService = {
     address: string,
     hopLevel: number,
     visitedAddresses: Set<string>
-  ) => Promise<{ riskScore: number; flags: RiskFlag[] }>;
-  counterpartyAnalysisCache: Map<
-    string,
-    {
-      result: unknown;
-      cachedAt: number;
-    }
-  >;
+  ) => Promise<{ riskScore: number; flags: RiskFlag[]; metadata?: unknown }>;
+  counterpartyAnalysisCache: {
+    set: (k: string, v: { result: unknown; cachedAt: number }) => void;
+  };
 };
 
 async function createServiceForRunMultiHopTests(): Promise<TestableService> {
-  // Ensure env validation passes in test environment.
   process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/test';
   process.env.TRONGRID_API_KEY ??= 'test-key';
   const { AddressCheckService } = await import('../address-check.service');
@@ -72,24 +101,72 @@ async function testCounterpartyCacheHitMissStats(): Promise<void> {
   const now = Date.now();
 
   service.counterpartyAnalysisCache.set('CP1', {
-    result: { riskScore: 80, flags: ['scam'] },
+    result: {
+      riskScore: 80,
+      flags: ['scam'] as RiskFlag[],
+      metadata: {
+        address: 'CP1',
+        isBlacklisted: false,
+        transactionCount: 0,
+        firstSeenAt: null,
+        addressAgeDays: null,
+        lastCheckedAt: new Date(),
+      },
+    },
     cachedAt: now,
   });
-  service.transactionAnalyzer.fetchTRC20IncomingVolumes = async () => ({
-    totalVolume: 100,
-    volumeByCounterparty: new Map([
-      ['CP1', 60],
-      ['CP2', 40],
-    ]),
-    pagesFetched: 1,
-    scannedTxCount: 2,
-    stablecoinTxCount: 2,
-    truncated: false,
-  });
+  service.transactionAnalyzer.fetchAddressTransactions = async () => [];
+  service.transactionAnalyzer.fetchTRC20IncomingVolumes = async (
+    addr: string
+  ) => {
+    if (addr !== 'ROOT') {
+      return {
+        totalVolume: 0,
+        volumeByCounterparty: new Map<string, number>(),
+        pagesFetched: 0,
+        scannedTxCount: 0,
+        stablecoinTxCount: 0,
+        truncated: false,
+      };
+    }
+    return {
+      totalVolume: 100,
+      volumeByCounterparty: new Map([
+        ['CP1', 60],
+        ['CP2', 40],
+      ]),
+      pagesFetched: 1,
+      scannedTxCount: 2,
+      stablecoinTxCount: 2,
+      truncated: false,
+    };
+  };
   service.analyzeAddressWithHops = async (addr: string) => ({
     riskScore: addr === 'CP1' ? 80 : 20,
     flags: addr === 'CP1' ? (['scam'] as RiskFlag[]) : [],
+    metadata: {
+      address: addr,
+      isBlacklisted: false,
+      transactionCount: 0,
+      firstSeenAt: null,
+      addressAgeDays: null,
+      lastCheckedAt: new Date(),
+    },
   });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (service as any).getAddressSecurityCached = async (addr: string) =>
+    addr === 'CP1'
+      ? {
+          isScam: true,
+          isPhishing: false,
+          isMalicious: false,
+          isBlacklisted: false,
+          tags: [],
+          riskLevel: 'HIGH',
+          riskScore: 80,
+        }
+      : null;
 
   const result = await service.runMultiHopIfNeeded(
     'ROOT',
@@ -97,7 +174,8 @@ async function testCounterpartyCacheHitMissStats(): Promise<void> {
     20,
     [],
     new Set<string>(['ROOT']),
-    []
+    [],
+    minimalPatterns
   );
 
   assert.equal(result.taintCalculationStats.counterpartyCacheHits, 1);
@@ -109,6 +187,9 @@ async function testCounterpartyCacheHitMissStats(): Promise<void> {
 
 async function testDustCounterpartiesDoNotAffectTaint(): Promise<void> {
   const service = await createServiceForRunMultiHopTests();
+  service.transactionAnalyzer.fetchAddressTransactions = async () => [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (service as any).getAddressSecurityCached = async () => null;
   service.transactionAnalyzer.fetchTRC20IncomingVolumes = async () => ({
     totalVolume: 100,
     volumeByCounterparty: new Map([
@@ -131,7 +212,8 @@ async function testDustCounterpartiesDoNotAffectTaint(): Promise<void> {
     20,
     [],
     new Set<string>(['ROOT']),
-    []
+    [],
+    minimalPatterns
   );
 
   assert.equal(result.taintCalculationStats.checkedCounterparties, 2);
@@ -146,6 +228,9 @@ async function testDustCounterpartiesDoNotAffectTaint(): Promise<void> {
 
 async function testVisitedCounterpartiesAreSkipped(): Promise<void> {
   const service = await createServiceForRunMultiHopTests();
+  service.transactionAnalyzer.fetchAddressTransactions = async () => [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (service as any).getAddressSecurityCached = async () => null;
   service.transactionAnalyzer.fetchTRC20IncomingVolumes = async () => ({
     totalVolume: 100,
     volumeByCounterparty: new Map([
@@ -160,6 +245,14 @@ async function testVisitedCounterpartiesAreSkipped(): Promise<void> {
   service.analyzeAddressWithHops = async (addr: string) => ({
     riskScore: addr === 'CP2' ? 70 : 10,
     flags: [],
+    metadata: {
+      address: addr,
+      isBlacklisted: false,
+      transactionCount: 0,
+      firstSeenAt: null,
+      addressAgeDays: null,
+      lastCheckedAt: new Date(),
+    },
   });
 
   const result = await service.runMultiHopIfNeeded(
@@ -168,7 +261,8 @@ async function testVisitedCounterpartiesAreSkipped(): Promise<void> {
     20,
     [],
     new Set<string>(['ROOT', 'VISITED_CP']),
-    []
+    [],
+    minimalPatterns
   );
 
   assert.equal(result.taintCalculationStats.skippedVisited, 1);
