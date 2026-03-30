@@ -55,7 +55,7 @@ export interface AddressAnalysisMetadata {
     stablecoinTxCount: number;
     truncated: boolean;
   };
-  /** Incoming TRC20 volume from counterparties with risk score > 60 */
+  /** Incoming stablecoin volume attributed to high–entity-risk sources (taint model) */
   riskyIncomingVolume?: number;
   /** Percentage of incoming volume that is tainted */
   taintPercent?: number;
@@ -65,7 +65,11 @@ export interface AddressAnalysisMetadata {
     incomingVolume: number;
     riskScore: number;
     risky: boolean;
+    entityType?: string;
+    hopLevel?: number;
   }>;
+  /** Human-readable AML explanations */
+  explanation?: string[];
   /** Taint run stats for debugging and observability */
   taintCalculationStats?: {
     maxConsidered: number;

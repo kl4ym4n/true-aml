@@ -5,6 +5,8 @@ export interface TransactionPatterns {
   uniqueCounterparties: number;
   averageTimeBetweenTx: number | null;
   hasHighFrequency: boolean;
+  /** Many transactions within a short wall-clock window (velocity / layering). */
+  hasHighVelocity: boolean;
   transactionTypes: string[];
   liquidityPoolInteractions: number;
   liquidityPoolAddresses: Set<string>;
@@ -14,6 +16,14 @@ export interface TransactionPatterns {
   maxIncoming: number;
   hasFastCashOut: boolean;
   isFanIn: boolean;
+  /** One source → many destinations (TRC20 heuristic). */
+  isFanOut: boolean;
+  /** Same sender repeatedly funds the address (possible smurfing / loops). */
+  hasLoopingFunds: boolean;
+  /** 0–1 concentration of repeated sender interactions. */
+  repeatedInteractionScore: number;
+  /** Share of swap-like contract calls among all txs. */
+  swapLikeRatio: number;
 }
 
 export interface AddressInfo {
@@ -67,6 +77,7 @@ export class PatternAnalyzer {
         uniqueCounterparties: 0,
         averageTimeBetweenTx: null,
         hasHighFrequency: false,
+        hasHighVelocity: false,
         transactionTypes: [],
         liquidityPoolInteractions: 0,
         liquidityPoolAddresses: new Set<string>(),
@@ -76,6 +87,10 @@ export class PatternAnalyzer {
         maxIncoming: 0,
         hasFastCashOut: false,
         isFanIn: false,
+        isFanOut: false,
+        hasLoopingFunds: false,
+        repeatedInteractionScore: 0,
+        swapLikeRatio: 0,
       };
     }
 
@@ -95,6 +110,8 @@ export class PatternAnalyzer {
     let incomingCount = 0;
     let maxIncoming = 0;
     const incomingSenders = new Set<string>();
+    const incomingPerSenderCount = new Map<string, number>();
+    const outgoingRecipients = new Set<string>();
 
     // Fast cash-out heuristic: outgoing shortly after significant incoming
     const FAST_CASHOUT_WINDOW_MS = 10 * 60 * 1000;
@@ -118,16 +135,23 @@ export class PatternAnalyzer {
       // Volume features (TRC20 only: tokenInfo present)
       const isTRC20 = !!tx.tokenInfo;
       const amt = tx.amount ?? 0;
-      if (subjectAddress && isTRC20 && typeof amt === 'number' && amt > 0) {
+      if (subjectAddress && isTRC20 && amt > 0) {
         const from = tx.from?.toLowerCase?.() ?? '';
         const to = tx.to?.toLowerCase?.() ?? '';
         if (to && to === subjectAddress) {
           totalIncoming += amt;
           incomingCount++;
           maxIncoming = Math.max(maxIncoming, amt);
-          if (from) incomingSenders.add(from);
+          if (from) {
+            incomingSenders.add(from);
+            incomingPerSenderCount.set(
+              from,
+              (incomingPerSenderCount.get(from) ?? 0) + 1
+            );
+          }
         } else if (from && from === subjectAddress) {
           totalOutgoing += amt;
+          if (to) outgoingRecipients.add(to);
         }
       }
 
@@ -185,7 +209,7 @@ export class PatternAnalyzer {
       for (const tx of sortedByTime) {
         const isTRC20 = !!tx.tokenInfo;
         const amt = tx.amount ?? 0;
-        if (!isTRC20 || typeof amt !== 'number' || amt <= 0) continue;
+        if (!isTRC20 || amt <= 0) continue;
         const from = tx.from?.toLowerCase?.() ?? '';
         const to = tx.to?.toLowerCase?.() ?? '';
         const ts = tx.block_timestamp ?? 0;
@@ -235,6 +259,21 @@ export class PatternAnalyzer {
     const totalTransactions = transactions.length;
     const swapRatio =
       totalTransactions > 0 ? swapLikeTransactions / totalTransactions : 0;
+
+    let maxRepeatIncoming = 0;
+    for (const c of incomingPerSenderCount.values()) {
+      maxRepeatIncoming = Math.max(maxRepeatIncoming, c);
+    }
+    const hasLoopingFunds = maxRepeatIncoming >= 3;
+    const repeatedInteractionScore =
+      incomingCount > 0
+        ? Math.min(1, maxRepeatIncoming / Math.max(incomingCount, 1))
+        : 0;
+
+    const isFanOut =
+      outgoingRecipients.size >= 4 &&
+      totalOutgoing > 0 &&
+      totalOutgoing > totalIncoming * 0.35;
 
     console.log(`[PatternAnalyzer] Swap analysis:`, {
       totalTransactions,
@@ -369,10 +408,29 @@ export class PatternAnalyzer {
         return diff < 60000; // Less than 1 minute between transactions
       });
 
+    const WINDOW_15M_MS = 15 * 60 * 1000;
+    let hasHighVelocity = false;
+    if (sortedTimestamps.length >= 5) {
+      for (let i = 0; i < sortedTimestamps.length; i++) {
+        let j = i;
+        while (
+          j < sortedTimestamps.length &&
+          sortedTimestamps[j] - sortedTimestamps[i] <= WINDOW_15M_MS
+        ) {
+          j++;
+        }
+        if (j - i >= 5) {
+          hasHighVelocity = true;
+          break;
+        }
+      }
+    }
+
     const result: TransactionPatterns = {
       uniqueCounterparties: counterparties.size,
       averageTimeBetweenTx,
       hasHighFrequency,
+      hasHighVelocity,
       transactionTypes: Array.from(transactionTypes),
       liquidityPoolInteractions: liquidityPoolAddresses.size,
       liquidityPoolAddresses,
@@ -382,6 +440,10 @@ export class PatternAnalyzer {
       maxIncoming,
       hasFastCashOut,
       isFanIn,
+      isFanOut,
+      hasLoopingFunds,
+      repeatedInteractionScore,
+      swapLikeRatio: swapRatio,
     };
 
     console.log(`[PatternAnalyzer] Pattern analysis complete:`, {

@@ -86,6 +86,14 @@
   line-height: 1.25rem;
 }
 
+.explanationList {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.45;
+}
+
 .kvGrid {
   display: grid;
   grid-template-columns: 1fr;

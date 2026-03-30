@@ -23,16 +23,28 @@ import {
   buildAnalysisMetadata,
   updateAddressProfile,
   createSkipResult,
-  getTaintScore,
-  getBehavioralScore,
   getVolumeScore,
-  getFinalRiskScore,
   getWhitelistLevel,
   WhitelistLevel,
 } from './address-check.utils';
+import { AdvancedRiskCalculator } from './address-check.utils';
+import { LruCache } from './address-check.utils';
+import { mapWithConcurrency } from './address-check.utils';
+import {
+  getEntityRiskWeight,
+  taintHopWeight,
+  TAINT_TIME_DECAY_LAMBDA,
+} from './address-check.utils/advanced-risk.constants';
+import { classifyEntity } from './address-check.utils';
+import { computeBehavioralPatternScore } from './address-check.utils';
+import type { TransactionPatterns } from './address-check.pattern-analyzer';
 
 const MAX_HOP_LEVEL = 1;
-const MAX_COUNTERPARTIES_TAINT = 10;
+const MAX_TAINT_HOPS = 3;
+const TOP_K_ROOT_COUNT = 15;
+const TOP_K_DEEP = 8;
+const TAINT_CONCURRENCY = 4;
+const MAX_TAINT_MS = 45_000;
 
 interface CachedSecurityData {
   addressSecurity?: AddressSecurity | null;
@@ -47,6 +59,8 @@ interface TaintCounterpartyInsight {
   incomingVolume: number;
   riskScore: number;
   risky: boolean;
+  entityType?: string;
+  hopLevel?: number;
 }
 
 interface TaintCalculationStats {
@@ -69,10 +83,16 @@ export class AddressCheckService {
   private transactionAnalyzer: TransactionAnalyzer;
   private patternAnalyzer: PatternAnalyzer;
   private riskCalculator: RiskCalculator;
-  private counterpartyAnalysisCache = new Map<string, CounterpartyCacheEntry>();
+  private readonly advancedRiskCalculator = new AdvancedRiskCalculator();
+  private counterpartyAnalysisCache = new LruCache<
+    string,
+    CounterpartyCacheEntry
+  >(2000);
+  private readonly securityCache = new LruCache<
+    string,
+    { value: AddressSecurity | null }
+  >(2000);
   private readonly counterpartyCacheTtlMs = 10 * 60 * 1000;
-  private readonly counterpartyCacheMaxSize = 1000;
-  private requestsSinceCacheCleanup = 0;
 
   constructor() {
     this.blockchainClient = BlockchainClientFactory.getClient(
@@ -83,12 +103,44 @@ export class AddressCheckService {
     this.riskCalculator = new RiskCalculator();
   }
 
-  async analyzeAddress(address: string): Promise<AddressAnalysisResult> {
-    this.requestsSinceCacheCleanup++;
-    if (this.requestsSinceCacheCleanup % 100 === 0) {
-      this.cleanupCounterpartyCache();
+  private getCachedCounterpartyAnalysis(
+    address: string
+  ): AddressAnalysisResult | null {
+    const e = this.counterpartyAnalysisCache.get(address);
+    if (!e) return null;
+    if (Date.now() - e.cachedAt >= this.counterpartyCacheTtlMs) {
+      this.counterpartyAnalysisCache.delete(address);
+      return null;
     }
+    return e.result;
+  }
 
+  private setCachedCounterpartyAnalysis(
+    address: string,
+    result: AddressAnalysisResult
+  ): void {
+    this.counterpartyAnalysisCache.set(address, {
+      result,
+      cachedAt: Date.now(),
+    });
+  }
+
+  private async getAddressSecurityCached(
+    address: string
+  ): Promise<AddressSecurity | null> {
+    const w = this.securityCache.get(address);
+    if (w !== undefined) return w.value;
+    try {
+      const s = await this.blockchainClient.checkAddressSecurity(address);
+      this.securityCache.set(address, { value: s });
+      return s;
+    } catch {
+      this.securityCache.set(address, { value: null });
+      return null;
+    }
+  }
+
+  async analyzeAddress(address: string): Promise<AddressAnalysisResult> {
     console.log(`[AddressCheck] Starting analysis for address: ${address}`);
     const startTime = Date.now();
 
@@ -149,12 +201,9 @@ export class AddressCheckService {
 
     // Cache only non-root analyses to speed up repeated counterparty checks.
     if (hopLevel > 0) {
-      const cached = this.counterpartyAnalysisCache.get(address);
-      if (
-        cached &&
-        Date.now() - cached.cachedAt < this.counterpartyCacheTtlMs
-      ) {
-        return cached.result;
+      const cached = this.getCachedCounterpartyAnalysis(address);
+      if (cached) {
+        return cached;
       }
     }
 
@@ -215,13 +264,15 @@ export class AddressCheckService {
       taintScore,
       behavioralScore,
       volumeScore,
+      explanation,
     } = await this.runMultiHopIfNeeded(
       address,
       hopLevel,
       baseRiskScore,
       transactions,
       visitedAddresses,
-      flags
+      flags,
+      patterns
     );
 
     let cappedScore = Math.round(Math.min(finalRiskScore, 100) * 100) / 100;
@@ -289,6 +340,8 @@ export class AddressCheckService {
         taintPercent,
         topRiskyCounterparties,
         taintCalculationStats,
+        ...(explanation !== undefined &&
+          explanation.length > 0 && { explanation }),
         scoreBreakdown: {
           baseRiskScore: Math.round(baseRiskScore * 100) / 100,
           taintScore,
@@ -308,38 +361,10 @@ export class AddressCheckService {
     };
 
     if (hopLevel > 0) {
-      this.counterpartyAnalysisCache.set(address, {
-        result: output,
-        cachedAt: Date.now(),
-      });
-      this.evictCounterpartyCacheIfNeeded();
+      this.setCachedCounterpartyAnalysis(address, output);
     }
 
     return output;
-  }
-
-  private cleanupCounterpartyCache(): void {
-    const now = Date.now();
-    for (const [addr, entry] of this.counterpartyAnalysisCache.entries()) {
-      if (now - entry.cachedAt >= this.counterpartyCacheTtlMs) {
-        this.counterpartyAnalysisCache.delete(addr);
-      }
-    }
-  }
-
-  private evictCounterpartyCacheIfNeeded(): void {
-    if (this.counterpartyAnalysisCache.size <= this.counterpartyCacheMaxSize) {
-      return;
-    }
-    // Remove oldest entries until size is within limit.
-    const entries = Array.from(this.counterpartyAnalysisCache.entries()).sort(
-      (a, b) => a[1].cachedAt - b[1].cachedAt
-    );
-    const toRemove =
-      this.counterpartyAnalysisCache.size - this.counterpartyCacheMaxSize;
-    for (let i = 0; i < toRemove; i++) {
-      this.counterpartyAnalysisCache.delete(entries[i][0]);
-    }
   }
 
   private async resolveSecurityAndBlacklist(
@@ -380,7 +405,8 @@ export class AddressCheckService {
     baseRiskScore: number,
     _transactions: Transaction[],
     visitedAddresses: Set<string>,
-    flags: RiskFlag[]
+    flags: RiskFlag[],
+    patterns: TransactionPatterns
   ): Promise<{
     finalRiskScore: number;
     flagsFromOtherHops: RiskFlag[];
@@ -400,7 +426,16 @@ export class AddressCheckService {
       stablecoinTxCount: number;
       truncated: boolean;
     };
+    explanation: string[];
   }> {
+    const emptyTaintInput = {
+      symbols: ['USDT', 'USDC'] as string[],
+      pagesFetched: 0,
+      scannedTxCount: 0,
+      stablecoinTxCount: 0,
+      truncated: false,
+    };
+
     let finalRiskScore = baseRiskScore;
     const flagsFromOtherHops: RiskFlag[] = [];
     const hopEntityFlags: RiskFlag[][] = [flags];
@@ -409,7 +444,7 @@ export class AddressCheckService {
     let taintPercent = 0;
     const topRiskyCounterparties: TaintCounterpartyInsight[] = [];
     const taintCalculationStats: TaintCalculationStats = {
-      maxConsidered: 0,
+      maxConsidered: TOP_K_ROOT_COUNT,
       checkedCounterparties: 0,
       analyzedCounterparties: 0,
       skippedVisited: 0,
@@ -420,13 +455,9 @@ export class AddressCheckService {
     let taintScore = 0;
     let behavioralScore = 0;
     let volumeScore = 0;
-    let taintInput = {
-      symbols: ['USDT', 'USDC'],
-      pagesFetched: 0,
-      scannedTxCount: 0,
-      stablecoinTxCount: 0,
-      truncated: false,
-    };
+    let taintInput = { ...emptyTaintInput };
+    const taintHints: string[] = [];
+    let cumulativeTaintRaw = 0;
 
     if (hopLevel !== 0) {
       return {
@@ -442,8 +473,12 @@ export class AddressCheckService {
         behavioralScore,
         volumeScore,
         taintInput,
+        explanation: [],
       };
     }
+
+    const taintStarted = Date.now();
+    const deadline = taintStarted + MAX_TAINT_MS;
 
     const {
       totalVolume,
@@ -472,84 +507,258 @@ export class AddressCheckService {
       truncated,
     });
 
-    if (totalVolume > 0 && volumeByCounterparty.size > 0) {
-      const sorted = Array.from(volumeByCounterparty.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, MAX_COUNTERPARTIES_TAINT);
-      taintCalculationStats.maxConsidered = MAX_COUNTERPARTIES_TAINT;
-      taintCalculationStats.checkedCounterparties = sorted.length;
+    if (totalVolume <= 0 || volumeByCounterparty.size === 0) {
+      behavioralScore = computeBehavioralPatternScore(patterns);
+      volumeScore = getVolumeScore(totalIncomingVolume);
+      const aml = this.advancedRiskCalculator.calculate({
+        baseRisk: baseRiskScore,
+        taintScore: 0,
+        behavioralScore,
+        volumeScore,
+        patterns,
+        taintHints: [],
+      });
+      finalRiskScore = aml.score;
+      return {
+        finalRiskScore,
+        flagsFromOtherHops,
+        hopEntityFlags,
+        totalIncomingVolume,
+        riskyIncomingVolume,
+        taintPercent: 0,
+        topRiskyCounterparties,
+        taintCalculationStats,
+        taintScore: 0,
+        behavioralScore,
+        volumeScore,
+        taintInput,
+        explanation: aml.explanation,
+      };
+    }
 
-      for (const [counterparty, incomingVolume] of sorted) {
-        if (visitedAddresses.has(counterparty)) {
-          taintCalculationStats.skippedVisited++;
-          continue;
-        }
-        const sharePercent =
-          totalVolume > 0 ? (incomingVolume / totalVolume) * 100 : 0;
-        if (
-          incomingVolume < MIN_TAINT_COUNTERPARTY_VOLUME &&
-          sharePercent < MIN_TAINT_VOLUME_SHARE_PERCENT
-        ) {
-          // Ignore dust/noise counterparties for taint stability.
-          taintCalculationStats.skippedDust++;
-          continue;
-        }
-        taintCalculationStats.analyzedCounterparties++;
+    const sortedRoot = Array.from(volumeByCounterparty.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TOP_K_ROOT_COUNT);
+    taintCalculationStats.checkedCounterparties = sortedRoot.length;
 
-        const cached = this.counterpartyAnalysisCache.get(counterparty);
-        if (
-          cached &&
-          Date.now() - cached.cachedAt < this.counterpartyCacheTtlMs
-        ) {
-          taintCalculationStats.counterpartyCacheHits++;
-        } else {
-          taintCalculationStats.counterpartyCacheMisses++;
+    const filtered: Array<[string, number]> = [];
+    for (const [cp, incomingVolume] of sortedRoot) {
+      if (visitedAddresses.has(cp)) {
+        taintCalculationStats.skippedVisited++;
+        continue;
+      }
+      const sharePercent =
+        totalVolume > 0 ? (incomingVolume / totalVolume) * 100 : 0;
+      if (
+        incomingVolume < MIN_TAINT_COUNTERPARTY_VOLUME &&
+        sharePercent < MIN_TAINT_VOLUME_SHARE_PERCENT
+      ) {
+        taintCalculationStats.skippedDust++;
+        continue;
+      }
+      filtered.push([cp, incomingVolume]);
+    }
+
+    type Hop1Row = {
+      cp: string;
+      incomingVolume: number;
+      result: AddressAnalysisResult;
+      entity: ReturnType<typeof classifyEntity>;
+      rw: number;
+    };
+
+    const hop1Rows: Hop1Row[] = [];
+
+    const hop1Results = await mapWithConcurrency(
+      filtered,
+      TAINT_CONCURRENCY,
+      async ([cp, incomingVolume]) => {
+        if (Date.now() > deadline) {
+          return null;
         }
+
+        const hadCache = !!this.getCachedCounterpartyAnalysis(cp);
 
         const result = await this.analyzeAddressWithHops(
-          counterparty,
+          cp,
           1,
           new Set(visitedAddresses)
         );
-        flagsFromOtherHops.push(...result.flags);
-        hopEntityFlags.push(result.flags);
 
-        // For taint, prefer "source/entity risk" signals over the full score,
-        // to avoid marking counterparties as taint-risky due to volume/behavior alone.
-        const isRisky =
-          (result as AddressAnalysisResult).metadata?.isBlacklisted ||
-          result.flags.includes('blacklisted') ||
-          result.flags.includes('scam') ||
-          result.flags.includes('phishing') ||
-          result.flags.includes('malicious');
-        topRiskyCounterparties.push({
-          address: counterparty,
-          incomingVolume: Math.round(incomingVolume * 100) / 100,
-          riskScore: Math.round(result.riskScore * 100) / 100,
-          risky: isRisky,
-        });
+        const sec = await this.getAddressSecurityCached(cp);
+        const txs = await this.transactionAnalyzer.fetchAddressTransactions(cp);
+        const lastDays =
+          TransactionAnalyzer.lastActivityDaysFromTransactions(txs);
+        const decay = Math.exp(-TAINT_TIME_DECAY_LAMBDA * lastDays);
+        const entity = classifyEntity(sec, null, null);
+        const rw = getEntityRiskWeight(entity);
+        const volShare = incomingVolume / totalVolume;
+        const contrib = volShare * rw * taintHopWeight(1) * decay;
+        const hint = `${(volShare * 100).toFixed(1)}% from ${entity} (hop 1, weight ${rw.toFixed(2)})`;
 
-        if (isRisky) {
-          riskyIncomingVolume += incomingVolume;
-        }
+        return {
+          cp,
+          incomingVolume,
+          result,
+          entity,
+          rw,
+          contrib,
+          hadCache,
+          hint,
+        };
       }
+    );
 
-      taintPercent =
-        totalVolume > 0
-          ? Math.round((riskyIncomingVolume / totalVolume) * 10000) / 100
-          : 0;
+    let hop1Hits = 0;
+    let hop1Misses = 0;
+    for (const r of hop1Results) {
+      if (!r) continue;
+      if (r.hadCache) hop1Hits++;
+      else hop1Misses++;
+      cumulativeTaintRaw += r.contrib;
+      taintHints.push(r.hint);
+      if (r.rw >= 0.5) {
+        riskyIncomingVolume += r.incomingVolume;
+      }
+    }
+    taintCalculationStats.counterpartyCacheHits = hop1Hits;
+    taintCalculationStats.counterpartyCacheMisses = hop1Misses;
+    taintCalculationStats.analyzedCounterparties =
+      hop1Results.filter(Boolean).length;
+
+    for (const row of hop1Results) {
+      if (!row) continue;
+      flagsFromOtherHops.push(...row.result.flags);
+      hopEntityFlags.push(row.result.flags);
+      hop1Rows.push({
+        cp: row.cp,
+        incomingVolume: row.incomingVolume,
+        result: row.result,
+        entity: row.entity,
+        rw: row.rw,
+      });
+      const isRisky =
+        row.result.metadata?.isBlacklisted ||
+        row.result.flags.includes('blacklisted') ||
+        row.result.flags.includes('scam') ||
+        row.result.flags.includes('phishing') ||
+        row.result.flags.includes('malicious') ||
+        row.rw >= 0.5;
+      topRiskyCounterparties.push({
+        address: row.cp,
+        incomingVolume: Math.round(row.incomingVolume * 100) / 100,
+        riskScore: Math.round(row.result.riskScore * 100) / 100,
+        risky: isRisky,
+        entityType: row.entity,
+        hopLevel: 1,
+      });
     }
 
-    taintScore = getTaintScore(taintPercent);
-    const directRisk = baseRiskScore;
-    behavioralScore = getBehavioralScore(flags, flagsFromOtherHops);
+    const hop1ForDeep = [...hop1Rows]
+      .sort((a, b) => b.incomingVolume - a.incomingVolume)
+      .slice(0, TOP_K_DEEP);
+
+    for (const h1 of hop1ForDeep) {
+      if (Date.now() > deadline || MAX_TAINT_HOPS < 2) break;
+      const alpha = h1.incomingVolume / totalVolume;
+      const vols2 = await this.transactionAnalyzer.fetchTRC20IncomingVolumes(
+        h1.cp
+      );
+      if (vols2.totalVolume <= 0) continue;
+      const topT = Array.from(vols2.volumeByCounterparty.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, TOP_K_DEEP);
+      for (const [tAddr, tVol] of topT) {
+        if (Date.now() > deadline) break;
+        if (tAddr === address || visitedAddresses.has(tAddr)) continue;
+        const beta = tVol / vols2.totalVolume;
+        const pathShare = alpha * beta;
+        const secT = await this.getAddressSecurityCached(tAddr);
+        const txsT =
+          await this.transactionAnalyzer.fetchAddressTransactions(tAddr);
+        const decayT = Math.exp(
+          -TAINT_TIME_DECAY_LAMBDA *
+            TransactionAnalyzer.lastActivityDaysFromTransactions(txsT)
+        );
+        const entityT = classifyEntity(secT, null, null);
+        const rwT = getEntityRiskWeight(entityT);
+        cumulativeTaintRaw += pathShare * rwT * taintHopWeight(2) * decayT;
+        taintHints.push(
+          `${(pathShare * 100).toFixed(2)}% path via ${entityT} (hop 2)`
+        );
+        if (rwT >= 0.5) {
+          riskyIncomingVolume += pathShare * totalVolume;
+        }
+      }
+    }
+
+    if (MAX_TAINT_HOPS >= 3 && Date.now() < deadline) {
+      const hop3Seeds = hop1ForDeep.slice(0, 4);
+      for (const h1 of hop3Seeds) {
+        if (Date.now() > deadline) break;
+        const vols2 = await this.transactionAnalyzer.fetchTRC20IncomingVolumes(
+          h1.cp
+        );
+        if (vols2.totalVolume <= 0) continue;
+        const alpha = h1.incomingVolume / totalVolume;
+        const topT = Array.from(vols2.volumeByCounterparty.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3);
+        for (const [tAddr, tVol] of topT) {
+          if (Date.now() > deadline) break;
+          const beta = tVol / vols2.totalVolume;
+          const vols3 =
+            await this.transactionAnalyzer.fetchTRC20IncomingVolumes(tAddr);
+          if (vols3.totalVolume <= 0) continue;
+          const topU = Array.from(vols3.volumeByCounterparty.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3);
+          for (const [uAddr, uVol] of topU) {
+            if (Date.now() > deadline) break;
+            if (uAddr === address || visitedAddresses.has(uAddr)) continue;
+            const gamma = uVol / vols3.totalVolume;
+            const pathShare = alpha * beta * gamma;
+            const secU = await this.getAddressSecurityCached(uAddr);
+            const txsU =
+              await this.transactionAnalyzer.fetchAddressTransactions(uAddr);
+            const decayU = Math.exp(
+              -TAINT_TIME_DECAY_LAMBDA *
+                TransactionAnalyzer.lastActivityDaysFromTransactions(txsU)
+            );
+            const entityU = classifyEntity(secU, null, null);
+            const rwU = getEntityRiskWeight(entityU);
+            cumulativeTaintRaw += pathShare * rwU * taintHopWeight(3) * decayU;
+            taintHints.push(
+              `${(pathShare * 100).toFixed(3)}% path via ${entityU} (hop 3)`
+            );
+          }
+        }
+      }
+    }
+
+    taintPercent =
+      totalVolume > 0
+        ? Math.round((riskyIncomingVolume / totalVolume) * 10000) / 100
+        : 0;
+
+    const normalizedTaint = Math.min(
+      1,
+      1 - Math.exp(-cumulativeTaintRaw * 1.5)
+    );
+    taintScore = Math.round(normalizedTaint * 10000) / 100;
+
+    behavioralScore = computeBehavioralPatternScore(patterns);
     volumeScore = getVolumeScore(totalIncomingVolume);
-    finalRiskScore = getFinalRiskScore(
-      directRisk,
+
+    const aml = this.advancedRiskCalculator.calculate({
+      baseRisk: baseRiskScore,
       taintScore,
       behavioralScore,
-      volumeScore
-    );
+      volumeScore,
+      patterns,
+      taintHints,
+    });
+    finalRiskScore = aml.score;
 
     return {
       finalRiskScore,
@@ -564,6 +773,7 @@ export class AddressCheckService {
       behavioralScore,
       volumeScore,
       taintInput,
+      explanation: aml.explanation,
     };
   }
 }

@@ -61,7 +61,14 @@ export const checkAddress = async (
             taintPercent: metadata.taintPercent,
           }),
           ...(metadata.topRiskyCounterparties !== undefined && {
-            topRiskyCounterparties: metadata.topRiskyCounterparties,
+            topRiskyCounterparties: metadata.topRiskyCounterparties.map(cp => ({
+              address: cp.address,
+              incomingVolume: cp.incomingVolume,
+              riskScore: cp.riskScore,
+              risky: cp.risky,
+              ...(cp.entityType !== undefined && { entityType: cp.entityType }),
+              ...(cp.hopLevel !== undefined && { hopLevel: cp.hopLevel }),
+            })),
           }),
           ...(metadata.taintCalculationStats !== undefined && {
             taintCalculationStats: metadata.taintCalculationStats,
@@ -69,6 +76,10 @@ export const checkAddress = async (
           ...(metadata.scoreBreakdown !== undefined && {
             scoreBreakdown: metadata.scoreBreakdown,
           }),
+          ...(metadata.explanation !== undefined &&
+            metadata.explanation.length > 0 && {
+              explanation: metadata.explanation,
+            }),
           ...(metadata.addressSecurity !== undefined && {
             addressSecurity: metadata.addressSecurity,
           }),

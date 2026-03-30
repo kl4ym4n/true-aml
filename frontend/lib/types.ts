@@ -74,6 +74,8 @@ export interface AddressCheckResponse {
       incomingVolume: number;
       riskScore: number;
       risky: boolean;
+      entityType?: string;
+      hopLevel?: number;
     }>;
     taintCalculationStats?: {
       maxConsidered: number;
@@ -93,6 +95,7 @@ export interface AddressCheckResponse {
       whitelistLevel?: 'strong' | 'soft';
       postWhitelistScore: number;
     };
+    explanation?: string[];
   };
 }
 

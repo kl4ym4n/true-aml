@@ -29,3 +29,10 @@ export {
 
 export { getWhitelistLevel } from './whitelist';
 export type { WhitelistLevel } from './whitelist';
+
+export { AdvancedRiskCalculator } from './advanced-risk-calculator';
+export { LruCache } from './lru-cache';
+export { mapWithConcurrency } from './concurrency';
+export { classifyEntity } from './entity-classification';
+export type { EntityType } from './entity-classification';
+export { computeBehavioralPatternScore } from './behavioral-pattern-score';
