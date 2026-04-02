@@ -59,12 +59,6 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
             </div>
           </div>
         )}
-        {metadata.addressAgeDays !== null && metadata.addressAgeDays !== undefined && (
-            <div className={styles.resultItem}>
-              <span className={styles.label}>Address Age</span>
-              <span className={styles.value}>{metadata.addressAgeDays} days</span>
-            </div>
-          )}
         {metadata.isBlacklisted && (
           <div className={styles.resultItem}>
             <span className={styles.label}>Blacklist Status</span>

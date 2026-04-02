@@ -40,12 +40,13 @@ services:
       - ./src:/app/src
       - ./prisma:/app/prisma
       - ./data:/app/data
+      - ./package.json:/app/package.json:ro
+      - ./package-lock.json:/app/package-lock.json:ro
       # Exclude node_modules from volume mount
       - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
-    command: npm run dev
     restart: unless-stopped
     networks:
       - aml-network-dev

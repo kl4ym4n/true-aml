@@ -6,14 +6,11 @@ WORKDIR /app
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
 
-# Install dependencies
+# Prisma must exist before npm ci (postinstall runs prisma generate)
 COPY package.json package-lock.json* ./
-RUN npm ci
-
-# Copy Prisma schema
 COPY prisma ./prisma/
 
-# Generate Prisma Client
+RUN npm ci --ignore-scripts
 RUN npx prisma generate
 
 # Copy source code (will be mounted as volume in docker-compose)
@@ -22,5 +19,6 @@ COPY . .
 # Expose port
 EXPOSE 3000
 
-# Use tsx for hot reload in development
-CMD ["npm", "run", "dev"]
+# Use tsx for hot reload in development, but ensure node_modules matches package-lock.json.
+RUN chmod +x /app/scripts/docker-dev-entry.sh
+CMD ["/app/scripts/docker-dev-entry.sh"]

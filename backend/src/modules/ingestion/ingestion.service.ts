@@ -3,8 +3,8 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import axios, { isAxiosError } from 'axios';
-import { parse } from 'csv-parse/sync';
 import prisma from '../../config/database';
+import { requireFromProjectRoot } from '../../lib/require-from-root';
 import type { BlacklistCategory } from '@prisma/client';
 import { AddressRecord, clamp01, normalizeAddress } from './ingestion.types';
 import { mergeAddressRecords, pickStrongerCategory } from './ingestion.utils';
@@ -14,6 +14,21 @@ import {
   parseOfacEnhancedDigitalCurrencyStream,
 } from './ofac-enhanced-xml';
 import { byteProgressTransform, ingestLog, ingestWarn } from './ingestion.log';
+
+const { parse } = requireFromProjectRoot('csv-parse') as typeof import('csv-parse');
+type CsvParseOptions = import('csv-parse').Options;
+
+function parseCsvString(
+  csv: string,
+  options: CsvParseOptions
+): Promise<Record<string, string>[]> {
+  return new Promise((resolve, reject) => {
+    parse(csv, options, (err, records) => {
+      if (err) reject(err);
+      else resolve((records ?? []) as Record<string, string>[]);
+    });
+  });
+}
 
 function formatIngestHttpError(err: unknown, what: string): Error {
   if (isAxiosError(err)) {
@@ -229,7 +244,7 @@ export class IngestionService {
       );
     }
 
-    const rows: Record<string, string>[] = parse(csv, {
+    const rows = await parseCsvString(csv, {
       columns: true,
       skip_empty_lines: true,
       relax_quotes: true,

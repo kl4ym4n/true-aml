@@ -1,7 +1,11 @@
-import sax from 'sax';
 import type { Readable } from 'node:stream';
-import unzipper from 'unzipper';
+import type { Tag } from 'sax';
+import type { Entry } from 'unzipper';
+import { requireFromProjectRoot } from '../../lib/require-from-root';
 import { ingestLog } from './ingestion.log';
+
+const sax = requireFromProjectRoot('sax') as typeof import('sax');
+const unzipper = requireFromProjectRoot('unzipper') as typeof import('unzipper');
 
 /**
  * Local ZIP only: uses `Open.file()` (central directory + random access).
@@ -41,7 +45,7 @@ function normEl(name: string): string {
   return localElementName(name).toLowerCase();
 }
 
-function attr(attrs: sax.Tag['attributes'], key: string): string | undefined {
+function attr(attrs: Tag['attributes'], key: string): string | undefined {
   const k = key.toLowerCase();
   for (const a of Object.keys(attrs)) {
     if (a.toLowerCase() === k) return attrs[a];
@@ -72,7 +76,7 @@ export function parseOfacEnhancedDigitalCurrencyStream(
 
   const parser = sax.createStream(true, { trim: true });
 
-  parser.on('opentag', (node: sax.Tag) => {
+  parser.on('opentag', (node: Tag) => {
     const el = normEl(node.name);
     stack.push(el);
 
@@ -216,7 +220,7 @@ export function openSdnEnhancedXmlFromZip(
     zipStream.on('error', reject);
     const pipe = zipStream.pipe(unzipper.Parse({ forceStream: true }));
     pipe.on('error', reject);
-    pipe.on('entry', (entry: unzipper.Entry) => {
+    pipe.on('entry', (entry: Entry) => {
       const p = entry.path.replace(/\\/g, '/');
       if (p.toLowerCase().endsWith('sdn_enhanced.xml')) {
         resolved = true;
