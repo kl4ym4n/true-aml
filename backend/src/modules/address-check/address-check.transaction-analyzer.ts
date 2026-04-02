@@ -206,6 +206,87 @@ export class TransactionAnalyzer {
   }
 
   /**
+   * Fetch outgoing TRC20 volumes for an address: total volume and volume per recipient (counterparty).
+   * Uses getTransactions (only_to=false) and filters rows where from == address.
+   * Counts only stablecoin transfers (USDT/USDC) that have tokenInfo.
+   */
+  async fetchTRC20OutgoingVolumes(address: string): Promise<{
+    totalVolume: number;
+    volumeByCounterparty: Map<string, number>;
+    pagesFetched: number;
+    scannedTxCount: number;
+    stablecoinTxCount: number;
+    truncated: boolean;
+  }> {
+    const volumeByCounterparty = new Map<string, number>();
+    let totalVolume = 0;
+    const seenTxIds = new Set<string>();
+    const pageLimit = 200;
+    const maxPages = 5;
+    let pagesFetched = 0;
+    let scannedTxCount = 0;
+    let stablecoinTxCount = 0;
+    let truncated = false;
+    try {
+      const normalizedAddress = address.toLowerCase();
+
+      for (let page = 0; page < maxPages; page++) {
+        const response = await this.blockchainClient.getTransactions(address, {
+          limit: pageLimit,
+          only_to: false,
+          start: page * pageLimit,
+        });
+        const list = response.data || [];
+        if (list.length === 0) break;
+        pagesFetched++;
+        scannedTxCount += list.length;
+
+        let newItemsInPage = 0;
+        for (const tx of list) {
+          const txId = tx.hash ?? '';
+          if (txId && seenTxIds.has(txId)) continue;
+          if (txId) {
+            seenTxIds.add(txId);
+            newItemsInPage++;
+          }
+
+          const from = tx.from ?? '';
+          if (from.toLowerCase() !== normalizedAddress) continue;
+          const tokenInfo = tx.tokenInfo;
+          if (!tokenInfo) continue;
+          if (!this.isTaintStablecoin(tokenInfo.symbol)) continue;
+          stablecoinTxCount++;
+          const to = tx.to ?? '';
+          const amount = this.normalizeTokenAmount(
+            tx.amount,
+            tokenInfo.decimals
+          );
+          if (amount <= 0) continue;
+          totalVolume += amount;
+          volumeByCounterparty.set(
+            to,
+            (volumeByCounterparty.get(to) ?? 0) + amount
+          );
+        }
+
+        if (!response.hasMore) break;
+        if (newItemsInPage === 0) break;
+      }
+      truncated = pagesFetched >= maxPages;
+    } catch {
+      // return zeros
+    }
+    return {
+      totalVolume,
+      volumeByCounterparty,
+      pagesFetched,
+      scannedTxCount,
+      stablecoinTxCount,
+      truncated,
+    };
+  }
+
+  /**
    * Extract unique counterparties from transactions.
    * Optionally excludes an address (e.g. the analyzed address when using incoming-only tx).
    */

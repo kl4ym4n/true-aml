@@ -62,8 +62,9 @@ export class TronGridAdapter implements IBlockchainClient {
     };
   }
 
-  async checkAddressSecurity(address: string): Promise<AddressSecurity | null> {
-    console.log(address);
+  async checkAddressSecurity(
+    _address: string
+  ): Promise<AddressSecurity | null> {
     // TronGrid doesn't provide security checks
     return null;
   }

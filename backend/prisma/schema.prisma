@@ -16,6 +16,8 @@ enum BlacklistCategory {
   SANCTION
   MIXER
   EXCHANGE
+  PHISHING
+  SUSPICIOUS
 }
 
 enum RiskLevel {
@@ -31,13 +33,18 @@ model BlacklistedAddress {
   address    String            @unique @db.VarChar(42)
   category   BlacklistCategory
   riskScore  Int               @default(0)
+  confidence Float             @default(0.0)
   source     String            @db.VarChar(255)
+  isDerived  Boolean           @default(false)
+  derivedFrom String?          @db.VarChar(255)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
   @@index([address])
   @@index([category])
   @@index([riskScore])
+  @@index([confidence])
+  @@index([isDerived])
   @@map("blacklisted_addresses")
 }
 

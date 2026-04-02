@@ -54,7 +54,6 @@ export class TronScanAdapter implements IBlockchainClient {
 
   async getAddressInfo(address: string): Promise<AddressInfo> {
     const info = await tronscanClient.getAddressInfo(address);
-    console.log('info: ', info);
     return {
       address: info.address,
       balance: info.balance || '0',
@@ -73,7 +72,6 @@ export class TronScanAdapter implements IBlockchainClient {
   async checkAddressSecurity(address: string): Promise<AddressSecurity | null> {
     try {
       const security = await tronscanClient.checkAddressSecurity(address);
-      console.log(security);
       const riskLevel =
         security.riskLevel === 'UNKNOWN' ? 'MEDIUM' : security.riskLevel;
       return {
