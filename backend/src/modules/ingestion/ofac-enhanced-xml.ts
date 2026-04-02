@@ -5,7 +5,9 @@ import { requireFromProjectRoot } from '../../lib/require-from-root';
 import { ingestLog } from './ingestion.log';
 
 const sax = requireFromProjectRoot('sax') as typeof import('sax');
-const unzipper = requireFromProjectRoot('unzipper') as typeof import('unzipper');
+const unzipper = requireFromProjectRoot(
+  'unzipper'
+) as typeof import('unzipper');
 
 /**
  * Local ZIP only: uses `Open.file()` (central directory + random access).

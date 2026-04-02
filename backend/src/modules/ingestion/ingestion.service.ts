@@ -15,7 +15,9 @@ import {
 } from './ofac-enhanced-xml';
 import { byteProgressTransform, ingestLog, ingestWarn } from './ingestion.log';
 
-const { parse } = requireFromProjectRoot('csv-parse') as typeof import('csv-parse');
+const { parse } = requireFromProjectRoot(
+  'csv-parse'
+) as typeof import('csv-parse');
 type CsvParseOptions = import('csv-parse').Options;
 
 function parseCsvString(
