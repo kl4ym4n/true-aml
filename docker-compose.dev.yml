@@ -39,11 +39,12 @@ services:
       - ./backend/src:/app/src
       - ./backend/prisma:/app/prisma
       - ./backend/data:/app/data
+      - ./backend/package.json:/app/package.json:ro
+      - ./backend/package-lock.json:/app/package-lock.json:ro
       - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
-    command: npm run dev
     restart: unless-stopped
     networks:
       - aml-network-dev

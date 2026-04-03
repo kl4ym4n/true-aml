@@ -42,7 +42,6 @@ export interface AddressCheckResponse {
     blacklistCategory?: string;
     blacklistRiskScore?: number;
     transactionCount: number;
-    addressAgeDays: number | null;
     firstSeenAt: string | null;
     addressSecurity?: {
       riskScore: number;

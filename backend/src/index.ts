@@ -2,6 +2,7 @@ import app from './app';
 import { env } from './config/env';
 import prisma from './config/database';
 import { initializeBlacklist } from './modules/blacklist';
+import { startIngestionCron } from './modules/ingestion';
 
 const startServer = async (): Promise<void> => {
   try {
@@ -11,6 +12,9 @@ const startServer = async (): Promise<void> => {
 
     // Load blacklist from file
     await initializeBlacklist();
+
+    // Start ingestion + expansion cron
+    startIngestionCron();
 
     // Start server
     const expressApp = app();

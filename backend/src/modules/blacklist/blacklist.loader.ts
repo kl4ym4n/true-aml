@@ -83,8 +83,21 @@ function validateBlacklistEntry(entry: BlacklistJsonEntry): void {
     );
   }
 
-  const validCategories: string[] = ['SCAM', 'SANCTION', 'MIXER', 'EXCHANGE'];
-  if (!entry.category || !validCategories.includes(entry.category)) {
+  const validCategories: BlacklistCategory[] = [
+    'SCAM',
+    'SANCTION',
+    'STOLEN_FUNDS',
+    'RANSOM',
+    'DARK_MARKET',
+    'MIXER',
+    'EXCHANGE',
+    'PHISHING',
+    'SUSPICIOUS',
+  ];
+  if (
+    !entry.category ||
+    !validCategories.includes(entry.category as BlacklistCategory)
+  ) {
     throw new Error(
       `Invalid category: ${entry.category}. Must be one of: ${validCategories.join(', ')}`
     );

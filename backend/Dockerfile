@@ -33,14 +33,12 @@ RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 # Create non-root user
 RUN groupadd -r nodejs && useradd -r -g nodejs nodejs
 
-# Copy package files
+# Prisma must exist before npm ci (postinstall runs prisma generate)
 COPY package.json package-lock.json* ./
-
-# Install production dependencies only
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy Prisma files and generate client
 COPY prisma ./prisma/
+
+RUN npm ci --only=production --ignore-scripts && npm cache clean --force
+
 RUN npx prisma generate
 
 # Copy built application from builder

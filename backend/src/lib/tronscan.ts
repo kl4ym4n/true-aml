@@ -250,7 +250,6 @@ export class TronScanClient {
 
         if (response.data) {
           const tokenSecurity = response.data;
-          console.log(response.data);
           // Convert TronScan token security data to AddressSecurity format
           const tokenLevel = parseInt(tokenSecurity.token_level || '0', 10);
 

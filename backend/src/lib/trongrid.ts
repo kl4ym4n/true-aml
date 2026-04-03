@@ -125,25 +125,12 @@ export class TronGridClient {
 
     return this.retryRequest(async () => {
       const url = `/v1/accounts/${address}/transactions`;
-      console.log(
-        `TronGrid API request: ${this.axiosInstance.defaults.baseURL}${url}`,
-        { params, address }
-      );
-
       const response = await this.axiosInstance.get<TRC20TransactionsResponse>(
         url,
         {
           params,
         }
       );
-
-      console.log(`TronGrid API response:`, {
-        data: response.data.data[0],
-        success: response.data.success,
-        dataLength: response.data.data?.length || 0,
-        meta: response.data.meta,
-        hasNext: !!response.data.meta?.links?.next,
-      });
 
       if (!response.data.success) {
         throw new TronGridError('Failed to fetch TRC-20 transactions');
@@ -164,7 +151,6 @@ export class TronGridClient {
       const response = await this.axiosInstance.get<TransactionDetailResponse>(
         `/v1/transactions/${txHash}`
       );
-      console.log(response);
       if (!response.data.success) {
         throw new TronGridError('Failed to fetch transaction details');
       }

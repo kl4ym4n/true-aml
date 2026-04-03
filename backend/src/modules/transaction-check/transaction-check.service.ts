@@ -1,4 +1,4 @@
-import { BlockchainClientFactory } from '../../lib/clients/blockchain-client.factory';
+import { BlockchainClientFactory } from '../../lib/clients';
 import { IBlockchainClient } from '../../lib/blockchain-client.interface';
 import { env } from '../../config/env';
 import { addressCheckService } from '../address-check';
@@ -39,7 +39,6 @@ export class TransactionCheckService {
     let txDetails;
     try {
       txDetails = await this.blockchainClient.getTransactionDetails(txHash);
-      console.log(txDetails);
     } catch (error: any) {
       // Handle API errors from different providers
       if (error?.statusCode === 404 || error?.message?.includes('not found')) {
