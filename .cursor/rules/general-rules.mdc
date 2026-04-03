@@ -1,0 +1,14 @@
+---
+description: Инструкции и правила проекта для AML
+alwaysApply: true
+---
+
+# Правила проекта для AML
+
+При работе с этим проектом **всегда следуй всем инструкциям** из файла AGENTS.md в корне репозитория.
+
+AGENTS.md содержит:
+- роль и экспертизу AML (Senior Front-End, Backend, AML, NodeJS, JS, React/TypeScript)
+- руководство по реализации кода
+
+@AGENTS.md

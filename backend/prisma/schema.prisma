@@ -14,10 +14,21 @@ datasource db {
 enum BlacklistCategory {
   SCAM
   SANCTION
+  STOLEN_FUNDS
+  RANSOM
+  DARK_MARKET
   MIXER
   EXCHANGE
   PHISHING
   SUSPICIOUS
+}
+
+enum EntityType {
+  exchange
+  mixer
+  bridge
+  lp
+  unknown
 }
 
 enum RiskLevel {
@@ -34,7 +45,14 @@ model BlacklistedAddress {
   category   BlacklistCategory
   riskScore  Int               @default(0)
   confidence Float             @default(0.0)
-  source     String            @db.VarChar(255)
+  /// Legacy single-line summary; prefer sourcesJson for provenance.
+  source     String            @db.Text
+  /// Hop depth from expansion root (0 = seed / non-derived).
+  depth      Int               @default(0)
+  /// Optional entity class (exchange/mixer/…); category remains AML bucket for now.
+  entityType EntityType?
+  /// Structured provenance: [{ name, type, firstSeenAt, confidenceContribution?, … }]
+  sourcesJson Json?
   isDerived  Boolean           @default(false)
   derivedFrom String?          @db.VarChar(255)
   createdAt  DateTime          @default(now())
@@ -45,6 +63,7 @@ model BlacklistedAddress {
   @@index([riskScore])
   @@index([confidence])
   @@index([isDerived])
+  @@index([depth])
   @@map("blacklisted_addresses")
 }
 

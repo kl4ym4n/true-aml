@@ -5,9 +5,20 @@ import type { Readable } from 'node:stream';
 import axios, { isAxiosError } from 'axios';
 import prisma from '../../config/database';
 import { requireFromProjectRoot } from '../../lib/require-from-root';
-import type { BlacklistCategory } from '@prisma/client';
+import type { BlacklistCategory, Prisma } from '@prisma/client';
 import { AddressRecord, clamp01, normalizeAddress } from './ingestion.types';
-import { mergeAddressRecords, pickStrongerCategory } from './ingestion.utils';
+import {
+  entityTypeHintFromCategory,
+  mergeAddressRecords,
+  pickStrongerCategory,
+} from './ingestion.utils';
+import {
+  ingestSourceNamesToProvenance,
+  legacyRowToProvenance,
+  mergeSourceProvenance,
+  provenanceEntriesFromJson,
+  sourcesSummary,
+} from './source-provenance';
 import {
   openSdnEnhancedXmlFromLocalZipFile,
   openSdnEnhancedXmlFromZip,
@@ -609,7 +620,30 @@ export class IngestionService {
       const nextDerivedFrom =
         ex && ex.derivedFrom ? ex.derivedFrom : opts.derivedFrom;
 
-      const nextSource = m.sources.join(';').slice(0, 255);
+      const incomingProv = ingestSourceNamesToProvenance(
+        m.sources,
+        clamp01(m.combinedConfidence),
+        'ingest'
+      );
+      let seedJson: Prisma.JsonValue | null | undefined = ex?.sourcesJson as
+        | Prisma.JsonValue
+        | undefined;
+      if (ex && seedJson == null && ex.source?.trim()) {
+        seedJson = mergeSourceProvenance(
+          null,
+          legacyRowToProvenance(ex)
+        ) as Prisma.JsonValue;
+      }
+      const mergedSourcesJson = mergeSourceProvenance(
+        seedJson,
+        incomingProv
+      );
+      const nextSourceSummary = sourcesSummary(
+        provenanceEntriesFromJson(mergedSourcesJson as Prisma.JsonValue)
+      );
+      const nextEntityType =
+        entityTypeHintFromCategory(nextCategory) ?? ex?.entityType ?? null;
+      const nextDepth = ex?.depth ?? 0;
 
       await prisma.blacklistedAddress.upsert({
         where: { address: m.address },
@@ -618,7 +652,10 @@ export class IngestionService {
           category: nextCategory,
           confidence: nextConfidence,
           riskScore: toRiskScore(nextConfidence),
-          source: nextSource,
+          source: nextSourceSummary,
+          sourcesJson: mergedSourcesJson,
+          depth: nextDepth,
+          entityType: nextEntityType,
           isDerived: nextIsDerived,
           derivedFrom: nextDerivedFrom,
         },
@@ -626,7 +663,10 @@ export class IngestionService {
           category: nextCategory,
           confidence: nextConfidence,
           riskScore: toRiskScore(nextConfidence),
-          source: nextSource,
+          source: nextSourceSummary,
+          sourcesJson: mergedSourcesJson,
+          depth: nextDepth,
+          entityType: nextEntityType,
           isDerived: nextIsDerived,
           derivedFrom: nextDerivedFrom,
         },

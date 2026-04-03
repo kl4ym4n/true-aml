@@ -3,6 +3,10 @@ import { env } from '../../config/env';
 import { IngestionService } from './ingestion.service';
 import { ExpansionService } from './expansion.service';
 
+/** In-process overlap guards (single replica). TODO: Redis/Postgres advisory lock for multi-instance. */
+let ingestionCronRunning = false;
+let expansionCronRunning = false;
+
 export function startIngestionCron(): void {
   if (!env.ingestion.enabled) return;
 
@@ -10,6 +14,14 @@ export function startIngestionCron(): void {
   const expansionService = new ExpansionService();
 
   cron.schedule(env.ingestion.cronIngestion, async () => {
+    if (ingestionCronRunning) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[Ingestion] Skipped scheduled run: previous ingestion still in progress'
+      );
+      return;
+    }
+    ingestionCronRunning = true;
     try {
       const r = await ingestionService.ingestAll({
         ofacCsvPath: env.ingestion.ofacCsvPath,
@@ -25,10 +37,20 @@ export function startIngestionCron(): void {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[Ingestion] Failed', e);
+    } finally {
+      ingestionCronRunning = false;
     }
   });
 
   cron.schedule(env.ingestion.cronExpansion, async () => {
+    if (expansionCronRunning) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[Expansion] Skipped scheduled run: previous expansion still in progress'
+      );
+      return;
+    }
+    expansionCronRunning = true;
     try {
       const r = await expansionService.expandOnce();
       // eslint-disable-next-line no-console
@@ -36,6 +58,8 @@ export function startIngestionCron(): void {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[Expansion] Failed', e);
+    } finally {
+      expansionCronRunning = false;
     }
   });
 }

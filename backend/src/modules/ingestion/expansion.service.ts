@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import {
   LruCache,
@@ -6,13 +7,26 @@ import {
 import { TransactionAnalyzer } from '../address-check/address-check.transaction-analyzer';
 import { BlockchainClientFactory } from '../../lib/clients';
 import { env } from '../../config/env';
-import { pickStrongerCategory } from './ingestion.utils';
+import {
+  computeDerivedExpansionConfidence,
+  mergeCategoryForExpansion,
+} from './ingestion.utils';
+import {
+  derivedProvenanceEntry,
+  mergeSourceProvenance,
+  provenanceEntriesFromJson,
+  sourcesSummary,
+} from './source-provenance';
+
+/** First hop from a non-derived expansion root. */
+const COUNTERPARTY_HOP_DEPTH = 1;
 
 export interface ExpansionRunResult {
   scannedRoots: number;
   expandedRoots: number;
   derivedUpserted: number;
   skippedNoVolumes: number;
+  skippedExistingDirect: number;
 }
 
 export class ExpansionService {
@@ -40,7 +54,7 @@ export class ExpansionService {
     const rootBatchSize = input?.rootBatchSize ?? 200;
     const topK = input?.topK ?? 20;
     const minVolume = input?.minVolume ?? 50;
-    const minShare = input?.minShare ?? 0.03; // 3%
+    const minShare = input?.minShare ?? 0.03;
     const concurrency = input?.concurrency ?? 5;
     const reexpandTtlMs = input?.reexpandTtlMs ?? 6 * 60 * 60 * 1000;
 
@@ -53,12 +67,12 @@ export class ExpansionService {
     let expandedRoots = 0;
     let derivedUpserted = 0;
     let skippedNoVolumes = 0;
+    let skippedExistingDirect = 0;
 
     await mapWithConcurrency(roots, concurrency, async root => {
       const cached = this.expansionCache.get(root.address);
       if (cached && Date.now() - cached.expandedAt < reexpandTtlMs) return;
 
-      // 🔹 BOTH directions
       const incoming = await this.txAnalyzer.fetchTRC20IncomingVolumes(
         root.address
       );
@@ -69,22 +83,16 @@ export class ExpansionService {
       const combined = new Map<string, number>();
       const txCountByCounterparty = new Map<string, number>();
 
-      // merge incoming
       for (const [addr, vol] of incoming.volumeByCounterparty.entries()) {
         combined.set(addr, (combined.get(addr) || 0) + vol);
       }
-
-      // merge outgoing
       for (const [addr, vol] of outgoing.volumeByCounterparty.entries()) {
         combined.set(addr, (combined.get(addr) || 0) + vol);
       }
 
-      // (6) interaction-based signal: approximate tx count by scanning recent txs (both directions)
       const recentTxs = await this.txAnalyzer.fetchAddressTransactions(
         root.address,
-        {
-          onlyIncoming: false,
-        }
+        { onlyIncoming: false }
       );
       const rootLower = root.address.toLowerCase();
       for (const tx of recentTxs) {
@@ -132,64 +140,91 @@ export class ExpansionService {
         return;
       }
 
-      const ops = entries.map(async ({ address, volume, txCount }) => {
-        const rootConfidence = root.confidence ?? root.riskScore / 100;
-
-        // (3) Improved expansion confidence
-        const volumeWeight = Math.min(1, volume / 10_000);
-        let derivedConfidence = rootConfidence * 0.5 * volumeWeight;
-
-        // (6) Interaction-based boost for repeated interactions
-        const interactionScore = Math.min(
-          1,
-          Math.log1p(txCount) / Math.log1p(20)
-        );
-        derivedConfidence = Math.min(
-          1,
-          derivedConfidence * (1 + 0.25 * interactionScore)
-        );
-
-        const existing = await prisma.blacklistedAddress.findUnique({
-          where: { address },
-        });
-
-        const nextCategory = existing
-          ? pickStrongerCategory(existing.category, root.category)
-          : root.category;
-        const nextConfidence = existing
-          ? Math.max(existing.confidence ?? 0, derivedConfidence)
-          : derivedConfidence;
-
-        const nextIsDerived = existing ? existing.isDerived || true : true;
-        const nextDerivedFrom =
-          existing && existing.derivedFrom
-            ? existing.derivedFrom
-            : root.address;
-
-        return prisma.blacklistedAddress.upsert({
-          where: { address },
-          create: {
-            address,
-            category: nextCategory,
-            confidence: nextConfidence,
-            riskScore: Math.round(nextConfidence * 100),
-            source: `derived:${root.source}`,
-            isDerived: nextIsDerived,
-            derivedFrom: nextDerivedFrom,
-          },
-          update: {
-            category: nextCategory,
-            confidence: nextConfidence,
-            riskScore: Math.round(nextConfidence * 100),
-            source: `derived:${root.source}`,
-            isDerived: nextIsDerived,
-            derivedFrom: nextDerivedFrom,
-          },
-        });
+      const candidateAddresses = entries.map(e => e.address);
+      const existingRows = await prisma.blacklistedAddress.findMany({
+        where: { address: { in: candidateAddresses } },
       });
+      const existingByAddress = new Map(
+        existingRows.map(r => [r.address, r])
+      );
 
-      const results = await Promise.all(ops);
-      derivedUpserted += results.filter(Boolean).length;
+      const rootConfidence = root.confidence ?? root.riskScore / 100;
+
+      const ops = entries.map(
+        async ({ address, volume, share, txCount }) => {
+          const existing = existingByAddress.get(address);
+
+          if (existing && !existing.isDerived) {
+            skippedExistingDirect++;
+            return 0;
+          }
+
+          const derivedConfidence = computeDerivedExpansionConfidence({
+            rootConfidence,
+            share,
+            volume,
+            txCount,
+            depth: COUNTERPARTY_HOP_DEPTH,
+          });
+
+          const nextCategory = mergeCategoryForExpansion({ existing });
+          const nextConfidence = existing
+            ? Math.max(existing.confidence ?? 0, derivedConfidence)
+            : derivedConfidence;
+
+          const prov = derivedProvenanceEntry({
+            rootAddress: root.address,
+            rootSource: root.source,
+            confidenceContribution: derivedConfidence,
+          });
+          const nextSourcesJson = mergeSourceProvenance(
+            existing?.sourcesJson,
+            [prov]
+          );
+          const nextSourceSummary = sourcesSummary(
+            provenanceEntriesFromJson(
+              nextSourcesJson as unknown as Prisma.JsonValue
+            )
+          );
+
+          const nextIsDerived = true;
+          const nextDerivedFrom =
+            existing?.derivedFrom ?? root.address;
+          const nextDepth = existing
+            ? Math.max(existing.depth ?? 0, COUNTERPARTY_HOP_DEPTH)
+            : COUNTERPARTY_HOP_DEPTH;
+
+          await prisma.blacklistedAddress.upsert({
+            where: { address },
+            create: {
+              address,
+              category: nextCategory,
+              confidence: nextConfidence,
+              riskScore: Math.round(nextConfidence * 100),
+              source: nextSourceSummary,
+              sourcesJson: nextSourcesJson,
+              depth: nextDepth,
+              entityType: null,
+              isDerived: nextIsDerived,
+              derivedFrom: nextDerivedFrom,
+            },
+            update: {
+              category: nextCategory,
+              confidence: nextConfidence,
+              riskScore: Math.round(nextConfidence * 100),
+              source: nextSourceSummary,
+              sourcesJson: nextSourcesJson,
+              depth: nextDepth,
+              isDerived: nextIsDerived,
+              derivedFrom: nextDerivedFrom,
+            },
+          });
+          return 1;
+        }
+      );
+
+      const counts = await Promise.all(ops);
+      derivedUpserted += counts.reduce<number>((a, b) => a + b, 0);
 
       expandedRoots++;
       this.expansionCache.set(root.address, { expandedAt: Date.now() });
@@ -200,6 +235,7 @@ export class ExpansionService {
       expandedRoots,
       derivedUpserted,
       skippedNoVolumes,
+      skippedExistingDirect,
     };
   }
 }
