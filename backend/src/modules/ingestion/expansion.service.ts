@@ -7,6 +7,7 @@ import {
 import { TransactionAnalyzer } from '../address-check/address-check.transaction-analyzer';
 import { BlockchainClientFactory } from '../../lib/clients';
 import { env } from '../../config/env';
+import { GraphCrawlerService } from './graph-crawler.service';
 import {
   computeDerivedExpansionConfidence,
   mergeCategoryForExpansion,
@@ -68,6 +69,7 @@ export class ExpansionService {
     let derivedUpserted = 0;
     let skippedNoVolumes = 0;
     let skippedExistingDirect = 0;
+    const crawlerExpansionAddresses: string[] = [];
 
     await mapWithConcurrency(roots, concurrency, async root => {
       const cached = this.expansionCache.get(root.address);
@@ -219,6 +221,9 @@ export class ExpansionService {
               derivedFrom: nextDerivedFrom,
             },
           });
+          if (env.crawler.enabled && env.crawler.enqueueFromExpansion) {
+            crawlerExpansionAddresses.push(address);
+          }
           return 1;
         }
       );
@@ -229,6 +234,18 @@ export class ExpansionService {
       expandedRoots++;
       this.expansionCache.set(root.address, { expandedAt: Date.now() });
     });
+
+    if (
+      env.crawler.enabled &&
+      env.crawler.enqueueFromExpansion &&
+      crawlerExpansionAddresses.length > 0
+    ) {
+      const crawler = new GraphCrawlerService();
+      await crawler.enqueueFromExpansionAddresses(
+        [...new Set(crawlerExpansionAddresses)],
+        COUNTERPARTY_HOP_DEPTH
+      );
+    }
 
     return {
       scannedRoots: roots.length,

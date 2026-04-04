@@ -38,6 +38,19 @@ enum RiskLevel {
   CRITICAL
 }
 
+enum CrawlQueueStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum CrawlSeedKind {
+  DIRECT_STRONG
+  DERIVED_SUSPICIOUS
+  OBSERVED_LOW
+}
+
 // Blacklisted addresses known for illicit activities
 model BlacklistedAddress {
   id         String            @id @default(uuid())
@@ -80,6 +93,75 @@ model AddressProfile {
   @@index([address])
   @@index([lastCheckedAt])
   @@map("address_profiles")
+}
+
+/// BFS-style graph crawl scheduling (TRON today; `chain` reserved for multi-chain).
+model CrawlQueue {
+  id                  String           @id @default(uuid())
+  address             String           @db.VarChar(42)
+  chain               String           @default("tron") @db.VarChar(32)
+  status              CrawlQueueStatus @default(PENDING)
+  seedKind            CrawlSeedKind    @default(OBSERVED_LOW)
+  priority            Float            @default(0)
+  /// Minimum hops from a high-confidence risky seed when this URL was enqueued.
+  hopFromRiskyRoot    Int              @default(0)
+  nextRunAt           DateTime         @default(now())
+  lastRunAt           DateTime?
+  lastCompletedAt     DateTime?
+  consecutiveFailures Int              @default(0)
+  lastError           String?          @db.Text
+  lockedAt            DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@unique([address, chain])
+  @@index([status, nextRunAt])
+  @@index([priority(sort: Desc)])
+  @@map("crawl_queue")
+}
+
+/// Directed exposure edge root → counterparty from crawler observation.
+model AddressEdge {
+  id                  String   @id @default(uuid())
+  rootAddress         String   @db.VarChar(42)
+  counterpartyAddress String   @db.VarChar(42)
+  chain               String   @default("tron") @db.VarChar(32)
+  totalVolume         Float    @default(0)
+  txCount             Int      @default(0)
+  share               Float?
+  lastObservedAt      DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([rootAddress, counterpartyAddress, chain])
+  @@index([counterpartyAddress])
+  @@map("address_edges")
+}
+
+/// Aggregated graph-derived signal before conservative promotion to `BlacklistedAddress`.
+model CandidateSignal {
+  id                       String      @id @default(uuid())
+  address                  String      @unique @db.VarChar(42)
+  chain                    String      @default("tron") @db.VarChar(32)
+  aggregatedConfidence     Float       @default(0)
+  minHopToRiskyRoot        Int         @default(999)
+  interactionCount         Int         @default(0)
+  totalRiskVolume          Float       @default(0)
+  uniqueCounterpartyCount  Int         @default(0)
+  maxObservedShare         Float       @default(0)
+  primaryRootAddress       String?     @db.VarChar(42)
+  hopDepth                 Int         @default(0)
+  entityType               EntityType?
+  isInfrastructure         Boolean     @default(false)
+  sourcesJson              Json?
+  promotedAt               DateTime?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
+
+  @@index([aggregatedConfidence])
+  @@index([promotedAt])
+  @@index([isInfrastructure])
+  @@map("candidate_signals")
 }
 
 // Transaction risk assessment results

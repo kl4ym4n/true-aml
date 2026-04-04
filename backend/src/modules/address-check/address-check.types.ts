@@ -43,9 +43,9 @@ export interface AddressAnalysisMetadata {
   };
   /** Breakdown of sources by category (trusted/suspicious/dangerous) with percentages */
   sourceBreakdown?: SourceBreakdown;
-  /** Total incoming TRC20 volume across all tokens (token units) */
+  /** Pattern analyzer: sum of incoming TRC20 transfers for every token in the sampled history (not stablecoin-only). */
   allTrc20IncomingVolume?: number;
-  /** Total incoming TRC20 volume (token units) */
+  /** Incoming USDT/USDC only (taint path); not the same as {@link allTrc20IncomingVolume}. */
   totalIncomingVolume?: number;
   /** Details about what the taint model scanned and how it was computed */
   taintInput?: {
