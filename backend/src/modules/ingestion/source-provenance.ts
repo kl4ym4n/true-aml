@@ -142,3 +142,19 @@ export function derivedProvenanceEntry(input: {
     derivedFromRoot: input.rootAddress,
   };
 }
+
+/** Graph crawler batch provenance (structured `sourcesJson` on blacklist / candidates). */
+export function graphCrawlerProvenanceEntry(input: {
+  rootAddress: string;
+  signalConfidence: number;
+  batchId?: string;
+}): SourceProvenanceEntry {
+  const suffix = input.batchId ? `:${input.batchId}` : '';
+  return {
+    name: `graph-crawler${suffix}→${input.rootAddress}`,
+    type: 'graph_crawler',
+    firstSeenAt: new Date().toISOString(),
+    confidenceContribution: input.signalConfidence,
+    derivedFromRoot: input.rootAddress,
+  };
+}

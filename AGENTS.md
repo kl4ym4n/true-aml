@@ -263,3 +263,150 @@ False positive (marking clean as scam) is worse than false negative.
 ---
 
 End of rules.
+
+
+Always batch when possible.
+
+Use:
+- preload existing candidates
+- preload existing blacklist rows
+- preload queue rows
+- use maps in memory
+
+Do not query the database once per discovered address unless unavoidable.
+
+---
+
+## 28. NO UNBOUNDED ASYNC FAN-OUT
+
+Always use controlled concurrency.
+
+Allowed:
+- p-limit
+- bounded worker pools
+- batch processing
+
+Not allowed:
+- raw unbounded Promise.all over large graphs
+
+---
+
+## 29. CACHE HOT LOOKUPS
+
+Use in-memory cache for:
+- recently seen addresses
+- repeated root metadata
+- repeat queue checks within the same run
+
+But do not rely on cache as the source of truth.
+
+---
+
+## 30. RECRAWL MUST BE SCHEDULED INTELLIGENTLY
+
+Not all nodes deserve the same recrawl cadence.
+
+Suggested policy:
+- strong direct seed: frequent recrawl
+- suspicious derived node: less frequent
+- low-confidence observed node: infrequent
+- failures: exponential backoff
+
+---
+
+# 🛡 SAFETY RULES
+
+## 31. CRAWLER FAILURE MUST NOT CORRUPT STATE
+
+Use:
+- try/finally around worker status updates
+- clear state transitions
+- failure logging
+- retry/backoff logic
+
+A failed crawl should be recoverable.
+
+---
+
+## 32. OVERLAPPING JOBS MUST BE PREVENTED
+
+Do not let the same worker logic run on overlapping schedules without protection.
+
+Use:
+- in-process lock at minimum
+- preferably distributed lock later
+
+---
+
+## 33. EVERY PROMOTION MUST BE EXPLAINABLE
+
+If a candidate becomes a BlacklistedAddress record as derived suspicious, it must be explainable by:
+- root(s)
+- hop depth
+- volume/share
+- txCount
+- confidence formula
+- timestamps
+
+If you cannot explain the promotion, the promotion is too weak.
+
+---
+
+# ✅ WHAT GOOD CRAWLER CODE LOOKS LIKE
+
+Good crawler code is:
+- conservative in labeling
+- aggressive in data collection
+- deterministic
+- auditable
+- idempotent
+- graph-aware
+- probability-aware
+- resistant to noise
+
+---
+
+# 🚫 WHAT NOT TO DO
+
+NEVER:
+
+- ❌ propagate SCAM/SANCTION/MIXER blindly through neighbors
+- ❌ store only nodes and ignore edges
+- ❌ treat observed graph contact as proof of maliciousness
+- ❌ ignore hop depth
+- ❌ ignore share
+- ❌ ignore interaction count
+- ❌ overwrite direct source data with crawler-derived data
+- ❌ enqueue the graph without limits
+- ❌ classify infrastructure as malicious by default
+- ❌ rely on one-off huge transfers as primary evidence
+
+---
+
+# 🧠 FINAL MENTAL MODEL
+
+This crawler is not a blacklist generator.
+
+It is:
+- a graph intelligence collector
+- a suspicious candidate builder
+- a foundation for clustering and taint analysis
+
+The crawler should maximize reusable intelligence while minimizing false positives.
+
+---
+
+# 🚀 FINAL RULE
+
+When unsure:
+
+Prefer:
+- storing the edge
+- storing the signal
+- delaying promotion
+
+instead of:
+- blacklisting too early
+
+A missed suspicious candidate can be revisited later.
+A poisoned blacklist damages the whole AML system.

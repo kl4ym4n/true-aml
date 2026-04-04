@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import axios, { isAxiosError } from 'axios';
 import prisma from '../../config/database';
+import { env } from '../../config/env';
 import { requireFromProjectRoot } from '../../lib/require-from-root';
 import type { BlacklistCategory, Prisma } from '@prisma/client';
 import { AddressRecord, clamp01, normalizeAddress } from './ingestion.types';
@@ -25,6 +26,7 @@ import {
   parseOfacEnhancedDigitalCurrencyStream,
 } from './ofac-enhanced-xml';
 import { byteProgressTransform, ingestLog, ingestWarn } from './ingestion.log';
+import { GraphCrawlerService } from './graph-crawler.service';
 
 const { parse } = requireFromProjectRoot(
   'csv-parse'
@@ -95,6 +97,8 @@ export interface IngestionRunResult {
   upserted: number;
   skipped: number;
   sources: Record<string, { upserted: number; skipped: number }>;
+  /** Graph crawler seeds enqueued after ingest (when `CRAWLER_ENQUEUE_AFTER_INGESTION` is on). */
+  crawlerEnqueued?: number;
 }
 
 export class IngestionService {
@@ -231,11 +235,19 @@ export class IngestionService {
       });
     }
 
+    let crawlerEnqueued: number | undefined;
+    if (env.crawler.enabled && env.crawler.enqueueAfterIngestion) {
+      const crawler = new GraphCrawlerService();
+      const q = await crawler.enqueueStrongSeedsFromBlacklist();
+      crawlerEnqueued = q.enqueued;
+      ingestLog('ingestAll: crawler seeds enqueued', { crawlerEnqueued });
+    }
+
     ingestLog('ingestAll: finished', {
       totalUpserted: upserted,
       totalSkipped: skipped,
     });
-    return { upserted, skipped, sources };
+    return { upserted, skipped, sources, crawlerEnqueued };
   }
 
   /**

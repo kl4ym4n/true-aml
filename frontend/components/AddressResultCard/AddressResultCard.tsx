@@ -12,14 +12,28 @@ interface AddressResultCardProps {
   result: AddressCheckResponse;
 }
 
+function isPositiveNumber(n: number | undefined): boolean {
+  return n !== undefined && Number.isFinite(n) && n > 0;
+}
+
 export default function AddressResultCard({ result }: AddressResultCardProps) {
   const { metadata } = result;
 
   const hasTaintData =
-    metadata.taintPercent !== undefined ||
-    metadata.allTrc20IncomingVolume !== undefined ||
-    metadata.totalIncomingVolume !== undefined ||
-    metadata.riskyIncomingVolume !== undefined;
+    isPositiveNumber(metadata.taintPercent) ||
+    isPositiveNumber(metadata.totalIncomingVolume) ||
+    isPositiveNumber(metadata.riskyIncomingVolume);
+
+  const taintStats = metadata.taintCalculationStats;
+  const hasMeaningfulTaintStats =
+    taintStats != null &&
+    (taintStats.maxConsidered > 0 ||
+      taintStats.checkedCounterparties > 0 ||
+      taintStats.analyzedCounterparties > 0 ||
+      (taintStats.skippedVisited ?? 0) > 0 ||
+      (taintStats.skippedDust ?? 0) > 0 ||
+      (taintStats.counterpartyCacheHits ?? 0) > 0 ||
+      (taintStats.counterpartyCacheMisses ?? 0) > 0);
 
   return (
     <ResultCard title="Analysis Result">
@@ -69,40 +83,26 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
           <div className={styles.section}>
             <span className={styles.sectionTitle}>Taint Analysis</span>
             <div className={styles.hint}>
-              Taint is computed from incoming USDT/USDC only. “All TRC20 Incoming” may be higher when funds arrive in other tokens.
+              Taint is computed from <strong>incoming USDT/USDC only</strong> (same basis as “Stablecoin
+              Incoming”).
             </div>
             <div className={styles.kvGrid}>
-              {metadata.taintPercent !== undefined && (
+              {isPositiveNumber(metadata.taintPercent) && (
                 <div className={styles.kvRow}>
                   <span>Taint Percent</span>
-                  <strong>{metadata.taintPercent.toFixed(2)}%</strong>
+                  <strong>{metadata.taintPercent!.toFixed(2)}%</strong>
                 </div>
               )}
-              {metadata.totalIncomingVolume !== undefined && (
+              {isPositiveNumber(metadata.totalIncomingVolume) && (
                 <div className={styles.kvRow}>
                   <span>Stablecoin Incoming (USDT/USDC)</span>
-                  <strong>{metadata.totalIncomingVolume.toFixed(2)}</strong>
+                  <strong>{metadata.totalIncomingVolume!.toFixed(2)}</strong>
                 </div>
               )}
-              {metadata.riskyIncomingVolume !== undefined && (
+              {isPositiveNumber(metadata.riskyIncomingVolume) && (
                 <div className={styles.kvRow}>
                   <span>Risky Stablecoin Incoming</span>
-                  <strong>{metadata.riskyIncomingVolume.toFixed(2)}</strong>
-                </div>
-              )}
-              {metadata.allTrc20IncomingVolume !== undefined && (
-                <div className={styles.kvRow}>
-                  <span>All TRC20 Incoming</span>
-                  <strong>{metadata.allTrc20IncomingVolume.toFixed(2)}</strong>
-                </div>
-              )}
-              {metadata.taintInput && (
-                <div className={styles.kvRow}>
-                  <span>Taint Scan</span>
-                  <strong>
-                    {metadata.taintInput.pagesFetched}p / {metadata.taintInput.stablecoinTxCount} stablecoin tx
-                    {metadata.taintInput.truncated ? ' (truncated)' : ''}
-                  </strong>
+                  <strong>{metadata.riskyIncomingVolume!.toFixed(2)}</strong>
                 </div>
               )}
             </div>
@@ -128,10 +128,12 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
                 <span>Base Risk</span>
                 <strong>{metadata.scoreBreakdown.baseRiskScore.toFixed(2)}</strong>
               </div>
-              <div className={styles.kvRow}>
-                <span>Taint Score</span>
-                <strong>{metadata.scoreBreakdown.taintScore.toFixed(2)}</strong>
-              </div>
+              {Math.abs(metadata.scoreBreakdown.taintScore) > 1e-9 && (
+                <div className={styles.kvRow}>
+                  <span>Taint Score</span>
+                  <strong>{metadata.scoreBreakdown.taintScore.toFixed(2)}</strong>
+                </div>
+              )}
               <div className={styles.kvRow}>
                 <span>Behavior Score</span>
                 <strong>{metadata.scoreBreakdown.behavioralScore.toFixed(2)}</strong>
@@ -193,26 +195,52 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
             </div>
           )}
 
-        {metadata.taintCalculationStats && (
+        {hasMeaningfulTaintStats && taintStats && (
           <div className={styles.section}>
             <span className={styles.sectionTitle}>Taint Stats</span>
             <div className={styles.kvGrid}>
-              <div className={styles.kvRow}>
-                <span>Max Considered</span>
-                <strong>{metadata.taintCalculationStats.maxConsidered}</strong>
-              </div>
-              <div className={styles.kvRow}>
-                <span>Checked</span>
-                <strong>{metadata.taintCalculationStats.checkedCounterparties}</strong>
-              </div>
-              <div className={styles.kvRow}>
-                <span>Analyzed</span>
-                <strong>{metadata.taintCalculationStats.analyzedCounterparties}</strong>
-              </div>
-              <div className={styles.kvRow}>
-                <span>Skipped (visited)</span>
-                <strong>{metadata.taintCalculationStats.skippedVisited}</strong>
-              </div>
+              {taintStats.maxConsidered > 0 && (
+                <div className={styles.kvRow}>
+                  <span>Max Considered</span>
+                  <strong>{taintStats.maxConsidered}</strong>
+                </div>
+              )}
+              {taintStats.checkedCounterparties > 0 && (
+                <div className={styles.kvRow}>
+                  <span>Checked</span>
+                  <strong>{taintStats.checkedCounterparties}</strong>
+                </div>
+              )}
+              {taintStats.analyzedCounterparties > 0 && (
+                <div className={styles.kvRow}>
+                  <span>Analyzed</span>
+                  <strong>{taintStats.analyzedCounterparties}</strong>
+                </div>
+              )}
+              {(taintStats.skippedVisited ?? 0) > 0 && (
+                <div className={styles.kvRow}>
+                  <span>Skipped (visited)</span>
+                  <strong>{taintStats.skippedVisited}</strong>
+                </div>
+              )}
+              {(taintStats.skippedDust ?? 0) > 0 && (
+                <div className={styles.kvRow}>
+                  <span>Skipped (dust)</span>
+                  <strong>{taintStats.skippedDust}</strong>
+                </div>
+              )}
+              {(taintStats.counterpartyCacheHits ?? 0) > 0 && (
+                <div className={styles.kvRow}>
+                  <span>Cache hits</span>
+                  <strong>{taintStats.counterpartyCacheHits}</strong>
+                </div>
+              )}
+              {(taintStats.counterpartyCacheMisses ?? 0) > 0 && (
+                <div className={styles.kvRow}>
+                  <span>Cache misses</span>
+                  <strong>{taintStats.counterpartyCacheMisses}</strong>
+                </div>
+              )}
             </div>
           </div>
         )}

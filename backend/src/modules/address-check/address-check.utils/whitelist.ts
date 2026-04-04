@@ -13,10 +13,17 @@ const STRONG_WHITELIST = new Set<string>([
   'TAzsQ9Gx8eqFNFSKbeXrbi45CuVPHzA8wr',
   'TK4ykR48cQQoyFcZ5N4xZCbsBaHcg6n3gJ',
   'TJqwA7SoZnERE4zW5uDEiPkbz4B66h9TFj',
+  'TJ5usJLLwjwn7Pw3TPbdzreG7dvgKzfQ5y', // Binance-Hot 9
   // MXC
   'TEPSrSYPDSQ7yXpMFPq91Fb1QEWpMkRGfn',
-  // OKX
+  // OKX Hot Wallet 8
   'TLaGjwhvA8XQYSxFAcAXy7Dvuue9eGYitv',
+  // UEEx
+  'TWQZEUfSPuMYjm4oHvmsktYcjD6rc5yyWq', // Hot Wallet 19
+  // CoinOne (KR)
+  'TDoyjmPJHzRFmYfCRLRsPhKjLETwd9fKr9',
+  // WhiteBIT
+  'TWBPGLwQw2EbqYLLw1DJnTDt2ZQ9yJW1JJ',
   // Kucoin
   'TUpHuDkiCCmwaTZBHZvQdwWzGNm5t8J2b9',
   // HTX

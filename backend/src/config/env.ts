@@ -42,6 +42,26 @@ interface EnvConfig {
     cronIngestion: string;
     cronExpansion: string;
   };
+  /** Optional graph crawler (TRON); additive to ingestion/expansion. */
+  crawler: {
+    enabled: boolean;
+    batchSize: number;
+    concurrency: number;
+    maxHop: number;
+    directRecrawlHours: number;
+    derivedRecrawlHours: number;
+    lowConfidenceRecrawlHours: number;
+    promotionThreshold: number;
+    minPromotionVolume: number;
+    minEdgeVolume: number;
+    minEdgeShare: number;
+    cronCrawler: string;
+    enqueueAfterIngestion: boolean;
+    enqueueFromExpansion: boolean;
+    failureBackoffBaseMinutes: number;
+    failureBackoffMaxMinutes: number;
+    staleLockMinutes: number;
+  };
 }
 
 function validateEnv(): EnvConfig {
@@ -74,6 +94,58 @@ function validateEnv(): EnvConfig {
   const cronIngestion = process.env.INGESTION_CRON || '0 3 * * *';
   const cronExpansion = process.env.EXPANSION_CRON || '0 */4 * * *';
 
+  const crawlerEnabled = (process.env.CRAWLER_ENABLED || 'false') === 'true';
+  const crawlerBatchSize = parseInt(
+    process.env.CRAWLER_BATCH_SIZE || '100',
+    10
+  );
+  const crawlerConcurrency = parseInt(
+    process.env.CRAWLER_CONCURRENCY || '4',
+    10
+  );
+  const crawlerMaxHop = parseInt(process.env.CRAWLER_MAX_HOP || '2', 10);
+  const crawlerDirectRecrawlHours = parseInt(
+    process.env.CRAWLER_DIRECT_RECRAWL_HOURS || '6',
+    10
+  );
+  const crawlerDerivedRecrawlHours = parseInt(
+    process.env.CRAWLER_DERIVED_RECRAWL_HOURS || '24',
+    10
+  );
+  const crawlerLowConfidenceRecrawlHours = parseInt(
+    process.env.CRAWLER_LOW_CONFIDENCE_RECRAWL_HOURS || '48',
+    10
+  );
+  const crawlerPromotionThreshold = parseFloat(
+    process.env.CRAWLER_PROMOTION_THRESHOLD || '0.35'
+  );
+  const crawlerMinPromotionVolume = parseFloat(
+    process.env.CRAWLER_MIN_PROMOTION_VOLUME || '50'
+  );
+  const crawlerMinEdgeVolume = parseFloat(
+    process.env.CRAWLER_MIN_EDGE_VOLUME || '50'
+  );
+  const crawlerMinEdgeShare = parseFloat(
+    process.env.CRAWLER_MIN_EDGE_SHARE || '0.03'
+  );
+  const cronCrawler = process.env.CRAWLER_CRON || '*/30 * * * *';
+  const crawlerEnqueueAfterIngestion =
+    (process.env.CRAWLER_ENQUEUE_AFTER_INGESTION || 'true') === 'true';
+  const crawlerEnqueueFromExpansion =
+    (process.env.CRAWLER_ENQUEUE_FROM_EXPANSION || 'false') === 'true';
+  const crawlerFailureBackoffBase = parseInt(
+    process.env.CRAWLER_FAILURE_BACKOFF_BASE_MINUTES || '15',
+    10
+  );
+  const crawlerFailureBackoffMax = parseInt(
+    process.env.CRAWLER_FAILURE_BACKOFF_MAX_MINUTES || '720',
+    10
+  );
+  const crawlerStaleLockMinutes = parseInt(
+    process.env.CRAWLER_STALE_LOCK_MINUTES || '30',
+    10
+  );
+
   if (!databaseUrl) {
     throw new Error('DATABASE_URL is required');
   }
@@ -104,6 +176,31 @@ function validateEnv(): EnvConfig {
       githubSources,
       cronIngestion,
       cronExpansion,
+    },
+    crawler: {
+      enabled: crawlerEnabled,
+      batchSize: Math.max(1, crawlerBatchSize),
+      concurrency: Math.max(1, crawlerConcurrency),
+      maxHop: Math.max(0, crawlerMaxHop),
+      directRecrawlHours: Math.max(1, crawlerDirectRecrawlHours),
+      derivedRecrawlHours: Math.max(1, crawlerDerivedRecrawlHours),
+      lowConfidenceRecrawlHours: Math.max(
+        crawlerDerivedRecrawlHours,
+        crawlerLowConfidenceRecrawlHours
+      ),
+      promotionThreshold: Math.min(1, Math.max(0, crawlerPromotionThreshold)),
+      minPromotionVolume: Math.max(0, crawlerMinPromotionVolume),
+      minEdgeVolume: Math.max(0, crawlerMinEdgeVolume),
+      minEdgeShare: Math.min(1, Math.max(0, crawlerMinEdgeShare)),
+      cronCrawler,
+      enqueueAfterIngestion: crawlerEnqueueAfterIngestion,
+      enqueueFromExpansion: crawlerEnqueueFromExpansion,
+      failureBackoffBaseMinutes: Math.max(1, crawlerFailureBackoffBase),
+      failureBackoffMaxMinutes: Math.max(
+        crawlerFailureBackoffBase,
+        crawlerFailureBackoffMax
+      ),
+      staleLockMinutes: Math.max(5, crawlerStaleLockMinutes),
     },
   };
 }
