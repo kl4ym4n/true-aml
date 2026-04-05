@@ -52,6 +52,7 @@ interface EnvConfig {
     derivedRecrawlHours: number;
     lowConfidenceRecrawlHours: number;
     promotionThreshold: number;
+    promotionMaxDepth: number;
     minPromotionVolume: number;
     minEdgeVolume: number;
     minEdgeShare: number;
@@ -117,7 +118,11 @@ function validateEnv(): EnvConfig {
     10
   );
   const crawlerPromotionThreshold = parseFloat(
-    process.env.CRAWLER_PROMOTION_THRESHOLD || '0.35'
+    process.env.CRAWLER_PROMOTION_THRESHOLD || '0.2'
+  );
+  const crawlerPromotionMaxDepth = parseInt(
+    process.env.CRAWLER_PROMOTION_MAX_DEPTH || '2',
+    10
   );
   const crawlerMinPromotionVolume = parseFloat(
     process.env.CRAWLER_MIN_PROMOTION_VOLUME || '50'
@@ -189,6 +194,7 @@ function validateEnv(): EnvConfig {
         crawlerLowConfidenceRecrawlHours
       ),
       promotionThreshold: Math.min(1, Math.max(0, crawlerPromotionThreshold)),
+      promotionMaxDepth: Math.max(0, crawlerPromotionMaxDepth),
       minPromotionVolume: Math.max(0, crawlerMinPromotionVolume),
       minEdgeVolume: Math.max(0, crawlerMinEdgeVolume),
       minEdgeShare: Math.min(1, Math.max(0, crawlerMinEdgeShare)),

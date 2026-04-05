@@ -3,6 +3,7 @@ import {
   WEIGHT_AML_BEHAVIORAL,
   WEIGHT_AML_TAINT,
   WEIGHT_AML_VOLUME,
+  isExchangeLikePattern,
 } from './advanced-risk.constants';
 import type { TransactionPatterns } from '../address-check.pattern-analyzer';
 
@@ -55,11 +56,18 @@ export class AdvancedRiskCalculator {
       taintHints,
     } = input;
 
+    const exchangeLike = patterns && isExchangeLikePattern(patterns);
+    const behavioralEff = exchangeLike
+      ? behavioralScore * 0.42
+      : behavioralScore;
+    const taintEff = exchangeLike ? taintScore * 1.08 : taintScore;
+    const volumeEff = exchangeLike ? volumeScore * 0.85 : volumeScore;
+
     const raw =
       baseRisk * this.weights.base +
-      taintScore * this.weights.taint +
-      behavioralScore * this.weights.behavioral +
-      volumeScore * this.weights.volume;
+      taintEff * this.weights.taint +
+      behavioralEff * this.weights.behavioral +
+      volumeEff * this.weights.volume;
 
     const score = Math.max(0, Math.min(100, Math.round(raw * 100) / 100));
 

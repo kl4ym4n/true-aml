@@ -12,8 +12,14 @@ export type RiskFlag =
 /**
  * Breakdown of fund sources by category (trusted / suspicious / dangerous).
  * Percentages per sub-label, 0–100, two decimals.
+ * `summary` sums to ~100 over analyzed flow (volume-weighted path).
  */
 export interface SourceBreakdown {
+  summary?: {
+    trusted: number;
+    suspicious: number;
+    dangerous: number;
+  };
   trusted: Record<string, number>;
   suspicious: Record<string, number>;
   dangerous: Record<string, number>;

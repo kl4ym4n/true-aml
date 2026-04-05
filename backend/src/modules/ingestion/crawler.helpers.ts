@@ -27,11 +27,7 @@ export function queuePriorityForSeed(
   return base + c;
 }
 
-function clamp(
-  value: number,
-  min: number,
-  max: number
-): number {
+function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
@@ -124,7 +120,14 @@ export function isLikelyInfrastructureCandidate(
   if (wl === 'strong') return true;
 
   const et = input.entityType;
-  if (et === 'exchange' || et === 'bridge' || et === 'lp') return true;
+  if (
+    et === 'exchange' ||
+    et === 'payment_processor' ||
+    et === 'bridge' ||
+    et === 'lp'
+  ) {
+    return true;
+  }
 
   const tags = (input.externalTags ?? []).map(t => t.toLowerCase());
   if (
@@ -167,4 +170,31 @@ export function suggestEntityTypeFromHeuristics(input: {
 }): EntityType | null {
   if (input.isWhitelistedExchange) return 'exchange';
   return null;
+}
+
+const MIN_ROOT_SIGNAL_FOR_CONTRIBUTOR = 0.04;
+const MAX_STORED_ROOTS = 48;
+
+/**
+ * Distinct crawl roots that contributed material signal; drives multi-root confidence boost.
+ * Formula per edge: signal × (1 + 0.3 × max(0, n−1)) after adding this root.
+ */
+export function mergeRiskyContributorRoots(
+  existingJson: unknown,
+  rootAddress: string,
+  signalConfidence: number
+): { roots: string[]; signalMultiplier: number } {
+  const prev = Array.isArray(existingJson)
+    ? (existingJson as unknown[]).filter(
+        (x): x is string => typeof x === 'string'
+      )
+    : [];
+  const set = new Set(prev);
+  if (rootAddress && signalConfidence >= MIN_ROOT_SIGNAL_FOR_CONTRIBUTOR) {
+    set.add(rootAddress);
+  }
+  const roots = [...set].slice(0, MAX_STORED_ROOTS);
+  const n = roots.length;
+  const signalMultiplier = 1 + 0.3 * Math.max(0, n - 1);
+  return { roots, signalMultiplier };
 }

@@ -5,20 +5,25 @@ import { env } from '../../config/env';
 import { BlockchainClientFactory } from '../../lib/clients';
 import { mapWithConcurrency } from '../address-check/address-check.utils';
 import { TransactionAnalyzer } from '../address-check/address-check.transaction-analyzer';
-import { getWhitelistLevel } from '../address-check/address-check.utils/whitelist';
+import { getWhitelistLevel } from '../address-check/address-check.utils';
+import { detectEntityType } from '../address-check/address-check.utils';
 import {
   combineConfidenceProbabilistic,
   computeCrawlerSignalConfidence,
   failureBackoffMs,
   isLikelyInfrastructureCandidate,
+  mergeRiskyContributorRoots,
   preferStrongerCrawlSeedKind,
   queuePriorityForSeed,
   recrawlIntervalMsForSeedKind,
   suggestEntityTypeFromHeuristics,
 } from './crawler.helpers';
-import type { CrawlerEnqueueInput, GraphCrawlerBatchResult } from './crawler.types';
+import type {
+  CrawlerEnqueueInput,
+  GraphCrawlerBatchResult,
+} from './crawler.types';
 import { mergeCategoryForExpansion } from './ingestion.utils';
-import { LruCache } from '../address-check/address-check.utils/lru-cache';
+import { LruCache } from '../address-check/address-check.utils';
 import {
   graphCrawlerProvenanceEntry,
   mergeSourceProvenance,
@@ -31,7 +36,10 @@ const DEFAULT_CHAIN = 'tron';
 export class GraphCrawlerService {
   private readonly txAnalyzer: TransactionAnalyzer;
   /** Hot blacklist rows during one batch (avoids repeat DB reads for same root). */
-  private readonly blacklistCache = new LruCache<string, BlacklistedAddress | null>(25_000);
+  private readonly blacklistCache = new LruCache<
+    string,
+    BlacklistedAddress | null
+  >(25_000);
 
   constructor() {
     const client = BlockchainClientFactory.getClient(
@@ -128,7 +136,7 @@ export class GraphCrawlerService {
         promotedAt: null,
         isInfrastructure: false,
         aggregatedConfidence: { gte: cfg.promotionThreshold },
-        minHopToRiskyRoot: { lte: cfg.maxHop },
+        minHopToRiskyRoot: { lte: cfg.promotionMaxDepth },
         OR: [
           { interactionCount: { gte: 2 } },
           { totalRiskVolume: { gte: cfg.minPromotionVolume } },
@@ -158,7 +166,8 @@ export class GraphCrawlerService {
             entityType:
               c.entityType ??
               suggestEntityTypeFromHeuristics({
-                isWhitelistedExchange: getWhitelistLevel(c.address) === 'strong',
+                isWhitelistedExchange:
+                  getWhitelistLevel(c.address) === 'strong',
               }),
           },
         });
@@ -180,10 +189,9 @@ export class GraphCrawlerService {
         signalConfidence: c.aggregatedConfidence,
         batchId: input.batchId,
       });
-      const mergedJson = mergeSourceProvenance(
-        existing?.sourcesJson,
-        [prov]
-      ) as Prisma.InputJsonValue;
+      const mergedJson = mergeSourceProvenance(existing?.sourcesJson, [
+        prov,
+      ]) as Prisma.InputJsonValue;
       const nextSummary = sourcesSummary(
         provenanceEntriesFromJson(mergedJson as Prisma.JsonValue)
       );
@@ -197,7 +205,9 @@ export class GraphCrawlerService {
             c.aggregatedConfidence
           )
         : c.aggregatedConfidence;
-      const nextRisk = Math.round(Math.min(1, Math.max(0, nextConfidence)) * 100);
+      const nextRisk = Math.round(
+        Math.min(1, Math.max(0, nextConfidence)) * 100
+      );
       const derivedFrom = c.primaryRootAddress ?? rootForProv;
 
       await prisma.blacklistedAddress.upsert({
@@ -272,7 +282,10 @@ export class GraphCrawlerService {
         chain: DEFAULT_CHAIN,
         seedKind: 'DIRECT_STRONG',
         hopFromRiskyRoot: 0,
-        priority: queuePriorityForSeed('DIRECT_STRONG', r.confidence ?? undefined),
+        priority: queuePriorityForSeed(
+          'DIRECT_STRONG',
+          r.confidence ?? undefined
+        ),
         rootConfidence: r.confidence ?? undefined,
       });
       if (did) enqueued++;
@@ -349,7 +362,10 @@ export class GraphCrawlerService {
       where: { id: existing.id },
       data: {
         priority: Math.max(existing.priority, priority),
-        seedKind: preferStrongerCrawlSeedKind(existing.seedKind, input.seedKind),
+        seedKind: preferStrongerCrawlSeedKind(
+          existing.seedKind,
+          input.seedKind
+        ),
         hopFromRiskyRoot: Math.min(
           existing.hopFromRiskyRoot,
           input.hopFromRiskyRoot
@@ -510,10 +526,7 @@ export class GraphCrawlerService {
       const to = tx.to ?? '';
       if (!from || !to) continue;
       if (from.toLowerCase() === rootLower) {
-        txCountByCounterparty.set(
-          to,
-          (txCountByCounterparty.get(to) ?? 0) + 1
-        );
+        txCountByCounterparty.set(to, (txCountByCounterparty.get(to) ?? 0) + 1);
       } else if (to.toLowerCase() === rootLower) {
         txCountByCounterparty.set(
           from,
@@ -542,10 +555,7 @@ export class GraphCrawlerService {
         share: volume / totalRootObservedVolume,
         txCount: txCountByCounterparty.get(address) ?? 1,
       }))
-      .filter(
-        x =>
-          x.volume >= cfg.minEdgeVolume && x.share >= cfg.minEdgeShare
-      )
+      .filter(x => x.volume >= cfg.minEdgeVolume && x.share >= cfg.minEdgeShare)
       .sort((a, b) => b.volume - a.volume);
 
     await this.upsertSelfCandidateProfile(item.address, {
@@ -599,9 +609,19 @@ export class GraphCrawlerService {
       });
 
       const existing = candByAddr.get(e.address);
+      const { roots: contributorRoots, signalMultiplier } =
+        mergeRiskyContributorRoots(
+          existing?.riskyContributorRoots,
+          item.address,
+          signalConfidence
+        );
+      const boostedEdgeSignal = Math.min(
+        1,
+        signalConfidence * signalMultiplier
+      );
       const newAgg = combineConfidenceProbabilistic(
         existing?.aggregatedConfidence ?? 0,
-        signalConfidence
+        boostedEdgeSignal
       );
       const minHop = Math.min(
         existing?.minHopToRiskyRoot ?? 999,
@@ -628,18 +648,27 @@ export class GraphCrawlerService {
 
       const prov = graphCrawlerProvenanceEntry({
         rootAddress: item.address,
-        signalConfidence,
+        signalConfidence: boostedEdgeSignal,
         batchId,
       });
-      const mergedSources = mergeSourceProvenance(
-        existing?.sourcesJson,
-        [prov]
-      ) as Prisma.InputJsonValue;
+      const mergedSources = mergeSourceProvenance(existing?.sourcesJson, [
+        prov,
+      ]) as Prisma.InputJsonValue;
 
       const cpWl = getWhitelistLevel(e.address);
-      const suggestedEt = suggestEntityTypeFromHeuristics({
-        isWhitelistedExchange: cpWl === 'strong',
+      const detectedEt = detectEntityType(e.address, {
+        uniqueCounterpartyCount: Math.max(1, Math.floor(e.txCount * 2.2)),
+        txCount: e.txCount,
+        maxCounterpartyShare: e.share,
       });
+      const suggestedEt =
+        cpWl === 'strong'
+          ? ('exchange' as const)
+          : detectedEt !== 'unknown'
+            ? detectedEt
+            : (suggestEntityTypeFromHeuristics({
+                isWhitelistedExchange: false,
+              }) ?? existing?.entityType);
 
       const infra = isLikelyInfrastructureCandidate({
         address: e.address,
@@ -647,8 +676,7 @@ export class GraphCrawlerService {
         minHopToRiskyRoot: minHop,
         interactionCount,
         totalRiskVolume,
-        uniqueCounterpartyCount:
-          existing?.uniqueCounterpartyCount ?? 0,
+        uniqueCounterpartyCount: existing?.uniqueCounterpartyCount ?? 0,
         maxObservedShare,
         entityType: suggestedEt ?? existing?.entityType,
         edge: { share: e.share, volume: e.volume, txCount: e.txCount },
@@ -669,6 +697,7 @@ export class GraphCrawlerService {
           hopDepth: hopDepthForSignal,
           entityType: suggestedEt ?? existing?.entityType ?? undefined,
           isInfrastructure: infra,
+          riskyContributorRoots: contributorRoots,
           sourcesJson: mergedSources,
         },
         update: {
@@ -681,16 +710,13 @@ export class GraphCrawlerService {
           hopDepth: hopDepthForSignal,
           entityType: suggestedEt ?? existing?.entityType ?? undefined,
           isInfrastructure: infra,
+          riskyContributorRoots: contributorRoots,
           sourcesJson: mergedSources,
         },
       });
       candidates++;
 
-      if (
-        counterpartyHop <= cfg.maxHop &&
-        !infra &&
-        cpWl !== 'strong'
-      ) {
+      if (counterpartyHop <= cfg.maxHop && !infra && cpWl !== 'strong') {
         await this.enqueueAddress({
           address: e.address,
           chain: item.chain,

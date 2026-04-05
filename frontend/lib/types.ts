@@ -26,6 +26,11 @@ export interface ApiResponse<T> {
 
 // Source breakdown (trusted / suspicious / dangerous)
 export interface SourceBreakdown {
+  summary?: {
+    trusted: number;
+    suspicious: number;
+    dangerous: number;
+  };
   trusted: Record<string, number>;
   suspicious: Record<string, number>;
   dangerous: Record<string, number>;
