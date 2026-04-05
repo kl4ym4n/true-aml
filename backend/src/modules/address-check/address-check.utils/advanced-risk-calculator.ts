@@ -6,6 +6,7 @@ import {
   isExchangeLikePattern,
 } from './advanced-risk.constants';
 import type { TransactionPatterns } from '../address-check.pattern-analyzer';
+import { behaviorMultiplierFromTrustedShare } from './trusted-share-calibration';
 
 export interface ScoreBreakdownAml {
   baseRisk: number;
@@ -18,6 +19,7 @@ export interface AdvancedRiskResult {
   score: number;
   breakdown: ScoreBreakdownAml;
   explanation: string[];
+  behavioralTrustMultiplier: number;
 }
 
 export interface AdvancedRiskInput {
@@ -31,6 +33,10 @@ export interface AdvancedRiskInput {
   patterns?: TransactionPatterns;
   /** Optional labels for explainability */
   taintHints?: string[];
+  /** Volume-weighted trusted share (0..1) from source-of-funds breakdown */
+  trustedShare01?: number;
+  /** Volume-weighted dangerous share (0..1) */
+  dangerousShare01?: number;
 }
 
 /**
@@ -54,13 +60,20 @@ export class AdvancedRiskCalculator {
       volumeScore,
       patterns,
       taintHints,
+      trustedShare01 = 0,
+      dangerousShare01 = 0,
     } = input;
 
     const exchangeLike = patterns && isExchangeLikePattern(patterns);
-    const behavioralEff = exchangeLike
-      ? behavioralScore * 0.42
-      : behavioralScore;
-    const taintEff = exchangeLike ? taintScore * 1.08 : taintScore;
+    const trustBeh = behaviorMultiplierFromTrustedShare(trustedShare01);
+    const behavioralEff =
+      behavioralScore *
+      (exchangeLike ? 0.42 : 1) *
+      trustBeh;
+    const taintTrustMul =
+      trustedShare01 >= 0.7 ? 0.62 : trustedShare01 >= 0.5 ? 0.82 : 1;
+    const taintEff =
+      taintScore * (exchangeLike ? 1.08 : 1) * taintTrustMul;
     const volumeEff = exchangeLike ? volumeScore * 0.85 : volumeScore;
 
     const raw =
@@ -94,11 +107,32 @@ export class AdvancedRiskCalculator {
     if (patterns?.hasFastCashOut) {
       explanation.push('Fast cash-out after incoming funds');
     }
-    if (taintScore >= 40) {
+    if (taintScore >= 40 && trustedShare01 < 0.55) {
       explanation.push('Elevated source-of-funds taint score');
     }
     if (baseRisk >= 40) {
       explanation.push('Elevated base risk from direct signals');
+    }
+
+    if (trustedShare01 >= 0.55) {
+      explanation.push(
+        'Most analyzed stablecoin inflow is classified as trusted (e.g. known exchanges or payment rails).'
+      );
+    }
+    if (trustedShare01 >= 0.5 && dangerousShare01 > 0) {
+      explanation.push(
+        `Residual dangerous source share remains visible (${(dangerousShare01 * 100).toFixed(2)}% of analyzed inflow).`
+      );
+    }
+    if (patterns?.isFanIn && trustedShare01 >= 0.55) {
+      explanation.push(
+        'Behavioral fan-in is partly discounted because inflow maps to trusted-classified sources.'
+      );
+    }
+    if (trustBeh < 1) {
+      explanation.push(
+        'Behavioral signal is partially suppressed due to a trusted exchange-like source profile.'
+      );
     }
 
     if (explanation.length === 0) {
@@ -114,6 +148,7 @@ export class AdvancedRiskCalculator {
         volumeScore,
       },
       explanation: [...new Set(explanation)].slice(0, 12),
+      behavioralTrustMultiplier: trustBeh,
     };
   }
 }

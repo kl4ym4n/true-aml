@@ -14,6 +14,7 @@ export type { LiquidityPoolInfo } from './liquidity';
 export {
   computeSourceBreakdown,
   computeVolumeWeightedSourceBreakdown,
+  computeExchangeTrustedShare01,
 } from './source-breakdown';
 export type { VolumeWeightedSourceRow } from './source-breakdown';
 export { detectEntityType } from './entity-type-detection';
@@ -34,8 +35,22 @@ export {
   getFinalRiskScore,
 } from './score';
 
-export { getWhitelistLevel } from './whitelist';
+export {
+  getWhitelistLevel,
+  isStrongWhitelistedExchange,
+} from './whitelist';
 export type { WhitelistLevel } from './whitelist';
+
+export {
+  classifySourceBucket,
+  DANGEROUS_BLACKLIST_CATEGORIES,
+} from './source-bucket-classifier';
+
+export {
+  behaviorMultiplierFromTrustedShare,
+  applyTrustedShareScoreCalibration,
+} from './trusted-share-calibration';
+export type { TrustedFlowCalibrationResult } from './trusted-share-calibration';
 
 export { AdvancedRiskCalculator } from './advanced-risk-calculator';
 export { LruCache } from './lru-cache';

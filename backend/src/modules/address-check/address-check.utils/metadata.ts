@@ -1,6 +1,7 @@
 import type {
   AddressAnalysisMetadata,
   SourceBreakdown,
+  SourceFlowCalibration,
 } from '../address-check.types';
 import type { WhitelistLevel } from './whitelist';
 
@@ -61,10 +62,12 @@ export interface BuildMetadataParams {
     taintScore: number;
     behavioralScore: number;
     volumeScore: number;
+    amlWeightedBlendScore?: number;
     preWhitelistScore: number;
     whitelistLevel?: WhitelistLevel;
     postWhitelistScore: number;
   };
+  sourceFlowCalibration?: SourceFlowCalibration;
 }
 
 /** Build AddressAnalysisMetadata from analysis results. */
@@ -92,6 +95,7 @@ export function buildAnalysisMetadata(
     taintCalculationStats,
     scoreBreakdown,
     explanation,
+    sourceFlowCalibration,
   } = params;
 
   return {
@@ -115,5 +119,6 @@ export function buildAnalysisMetadata(
     ...(taintCalculationStats !== undefined && { taintCalculationStats }),
     ...(scoreBreakdown !== undefined && { scoreBreakdown }),
     ...(explanation !== undefined && explanation.length > 0 && { explanation }),
+    ...(sourceFlowCalibration !== undefined && { sourceFlowCalibration }),
   };
 }

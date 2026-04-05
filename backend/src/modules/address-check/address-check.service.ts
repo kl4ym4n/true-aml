@@ -21,6 +21,10 @@ import {
   buildLiquidityPoolInfo,
   computeSourceBreakdown,
   computeVolumeWeightedSourceBreakdown,
+  computeExchangeTrustedShare01,
+  applyTrustedShareScoreCalibration,
+  classifySourceBucket,
+  isStrongWhitelistedExchange,
   buildAnalysisMetadata,
   updateAddressProfile,
   createSkipResult,
@@ -42,6 +46,7 @@ import {
 } from './address-check.utils/advanced-risk.constants';
 import { computeBehavioralPatternScore } from './address-check.utils';
 import type { VolumeWeightedSourceRow } from './address-check.utils';
+import type { SourceFlowCalibration } from './address-check.types';
 import type { TransactionPatterns } from './address-check.pattern-analyzer';
 
 const MAX_HOP_LEVEL = 1;
@@ -271,6 +276,7 @@ export class AddressCheckService {
       volumeScore,
       explanation,
       taintBreakdownRows,
+      sourceFlowCalibration,
     } = await this.runMultiHopIfNeeded(
       address,
       hopLevel,
@@ -357,10 +363,16 @@ export class AddressCheckService {
           taintScore,
           behavioralScore: Math.round(behavioralScore * 100) / 100,
           volumeScore: Math.round(volumeScore * 100) / 100,
+          ...(sourceFlowCalibration !== undefined && {
+            amlWeightedBlendScore: Math.round(
+              sourceFlowCalibration.amlWeightedBlendScore * 100
+            ) / 100,
+          }),
           preWhitelistScore: Math.round(finalRiskScore * 100) / 100,
           whitelistLevel,
           postWhitelistScore: cappedScore,
         },
+        ...(sourceFlowCalibration !== undefined && { sourceFlowCalibration }),
       }),
     });
 
@@ -438,6 +450,7 @@ export class AddressCheckService {
     };
     explanation: string[];
     taintBreakdownRows?: VolumeWeightedSourceRow[];
+    sourceFlowCalibration?: SourceFlowCalibration;
   }> {
     const emptyTaintInput = {
       symbols: ['USDT', 'USDC'] as string[],
@@ -469,6 +482,11 @@ export class AddressCheckService {
     let taintInput = { ...emptyTaintInput };
     const taintHints: string[] = [];
     let cumulativeTaintRaw = 0;
+    let trustedShare01 = 0;
+    let suspiciousShare01 = 0;
+    let dangerousShare01 = 0;
+    let exchangeShare01 = 0;
+    let whitelistMatchedHop1 = 0;
 
     if (hopLevel !== 0) {
       return {
@@ -486,6 +504,7 @@ export class AddressCheckService {
         taintInput,
         explanation: [],
         taintBreakdownRows: undefined,
+        sourceFlowCalibration: undefined,
       };
     }
 
@@ -546,6 +565,7 @@ export class AddressCheckService {
         taintInput,
         explanation: aml.explanation,
         taintBreakdownRows: undefined,
+        sourceFlowCalibration: undefined,
       };
     }
 
@@ -637,10 +657,12 @@ export class AddressCheckService {
       taintHints.push(r.hint);
       if (
         isAmlRiskyCounterparty({
+          address: r.cp,
           entity: r.entity,
           flags: r.result.flags,
           entityRiskWeight: r.rw,
           isMetadataBlacklisted: !!r.result.metadata?.isBlacklisted,
+          blacklistCategory: r.result.metadata?.blacklistCategory ?? null,
         })
       ) {
         riskyIncomingVolume += r.incomingVolume;
@@ -663,10 +685,12 @@ export class AddressCheckService {
         rw: row.rw,
       });
       const isRisky = isAmlRiskyCounterparty({
+        address: row.cp,
         entity: row.entity,
         flags: row.result.flags,
         entityRiskWeight: row.rw,
         isMetadataBlacklisted: !!row.result.metadata?.isBlacklisted,
+        blacklistCategory: row.result.metadata?.blacklistCategory ?? null,
       });
       topRiskyCounterparties.push({
         address: row.cp,
@@ -676,6 +700,27 @@ export class AddressCheckService {
         entityType: row.entity,
         hopLevel: 1,
       });
+    }
+
+    const taintBreakdownRows: VolumeWeightedSourceRow[] = hop1Rows.map(
+      row => ({
+        counterpartyAddress: row.cp,
+        volumeShare: row.incomingVolume / totalVolume,
+        entity: row.entity,
+        flags: row.result.flags,
+        blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+      })
+    );
+
+    if (taintBreakdownRows.length > 0) {
+      const flow = computeVolumeWeightedSourceBreakdown(taintBreakdownRows);
+      trustedShare01 = (flow.summary?.trusted ?? 0) / 100;
+      suspiciousShare01 = (flow.summary?.suspicious ?? 0) / 100;
+      dangerousShare01 = (flow.summary?.dangerous ?? 0) / 100;
+      exchangeShare01 = computeExchangeTrustedShare01(taintBreakdownRows);
+      whitelistMatchedHop1 = taintBreakdownRows.filter(r =>
+        isStrongWhitelistedExchange(r.counterpartyAddress)
+      ).length;
     }
 
     const hop1ForDeep = [...hop1Rows]
@@ -717,6 +762,7 @@ export class AddressCheckService {
         );
         if (
           isAmlRiskyCounterparty({
+            address: tAddr,
             entity: entityT,
             flags: [],
             entityRiskWeight: rwT,
@@ -794,14 +840,6 @@ export class AddressCheckService {
       taintScore = Math.round(taintScore * 100) / 100;
     }
 
-    const taintBreakdownRows: VolumeWeightedSourceRow[] = hop1Results
-      .filter((r): r is NonNullable<(typeof hop1Results)[number]> => r != null)
-      .map(r => ({
-        volumeShare: r.incomingVolume / totalVolume,
-        entity: r.entity,
-        flags: r.result.flags,
-      }));
-
     behavioralScore = computeBehavioralPatternScore(patterns);
     volumeScore = getVolumeScore(totalIncomingVolume);
 
@@ -812,8 +850,58 @@ export class AddressCheckService {
       volumeScore,
       patterns,
       taintHints,
+      trustedShare01,
+      dangerousShare01,
     });
-    finalRiskScore = aml.score;
+
+    const trustCal = applyTrustedShareScoreCalibration({
+      preliminaryScore: aml.score,
+      trustedShare01,
+      dangerousShare01,
+    });
+    finalRiskScore = trustCal.score;
+
+    const counterpartyBuckets =
+      taintBreakdownRows.length > 0
+        ? [...taintBreakdownRows]
+            .sort((a, b) => b.volumeShare - a.volumeShare)
+            .slice(0, 12)
+            .map(r => ({
+              address: r.counterpartyAddress,
+              bucket: classifySourceBucket({
+                address: r.counterpartyAddress,
+                entity: r.entity,
+                flags: r.flags,
+                blacklistCategory: r.blacklistCategory,
+              }),
+              volumeSharePercent: Math.round(r.volumeShare * 10000) / 100,
+            }))
+        : undefined;
+
+    const sourceFlowCalibration: SourceFlowCalibration | undefined =
+      taintBreakdownRows.length > 0
+        ? {
+            trustedShare: Math.round(trustedShare01 * 10000) / 100,
+            suspiciousShare: Math.round(suspiciousShare01 * 10000) / 100,
+            dangerousShare: Math.round(dangerousShare01 * 10000) / 100,
+            exchangeShare: Math.round(exchangeShare01 * 10000) / 100,
+            whitelistMatchedCount: whitelistMatchedHop1,
+            trustedSuppressionApplied:
+              trustCal.trustLayerApplied ||
+              aml.behavioralTrustMultiplier < 1,
+            trustedSuppressionFactor: trustCal.trustLayerFactor,
+            behavioralTrustMultiplier: aml.behavioralTrustMultiplier,
+            dangerousUplift: trustCal.dangerousUplift,
+            amlWeightedBlendScore: aml.score,
+            counterpartyBuckets,
+          }
+        : undefined;
+
+    const explanation = [
+      ...aml.explanation,
+      ...trustCal.explanationLines,
+    ];
+    const explanationDedup = [...new Set(explanation)].slice(0, 14);
 
     return {
       finalRiskScore,
@@ -828,8 +916,10 @@ export class AddressCheckService {
       behavioralScore,
       volumeScore,
       taintInput,
-      explanation: aml.explanation,
-      taintBreakdownRows,
+      explanation: explanationDedup,
+      taintBreakdownRows:
+        taintBreakdownRows.length > 0 ? taintBreakdownRows : undefined,
+      sourceFlowCalibration,
     };
   }
 }

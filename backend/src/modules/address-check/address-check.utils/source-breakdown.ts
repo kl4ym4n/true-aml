@@ -1,14 +1,19 @@
 import type { RiskFlag, SourceBreakdown } from '../address-check.types';
+import { classifySourceBucket } from './source-bucket-classifier';
+import { isStrongWhitelistedExchange } from './whitelist';
 
 export interface VolumeWeightedSourceRow {
+  counterpartyAddress: string;
   /** Share of analyzed stablecoin inflow (0..1). */
   volumeShare: number;
   /** Resolved AML entity (classify + heuristics). */
   entity: string;
   flags: RiskFlag[];
+  blacklistCategory?: string | null;
 }
 
 function labelForRow(
+  counterpartyAddress: string,
   entity: string,
   flags: RiskFlag[],
   bucket: 'trusted' | 'suspicious' | 'dangerous'
@@ -26,6 +31,9 @@ function labelForRow(
     return 'HighRisk';
   }
   if (bucket === 'trusted') {
+    if (isStrongWhitelistedExchange(counterpartyAddress)) {
+      return 'Known exchange (whitelist)';
+    }
     if (entity === 'exchange') return 'Exchange';
     if (entity === 'payment_processor') return 'PaymentProcessor';
     if (entity === 'bridge') return 'Bridge';
@@ -42,33 +50,45 @@ function labelForRow(
 }
 
 /**
- * Map entity + flags into AML bucket. Unknown / behavioral flags → suspicious (not trusted).
+ * Map entity + flags into AML bucket (no counterparty address).
+ * Prefer {@link classifySourceBucket} when address is known (whitelist / DB category).
  */
 export function categorizeAmlSourceBucket(
   entity: string,
   flags: RiskFlag[]
 ): 'trusted' | 'suspicious' | 'dangerous' {
-  const f = new Set(flags);
-  if (f.has('blacklisted')) return 'dangerous';
-  if (f.has('scam') || f.has('phishing')) return 'dangerous';
-  if (f.has('malicious')) return 'dangerous';
+  return classifySourceBucket({
+    address: '',
+    entity,
+    flags,
+    blacklistCategory: null,
+  });
+}
 
-  if (
-    entity === 'sanctions' ||
-    entity === 'scam' ||
-    entity === 'phishing' ||
-    entity === 'darknet' ||
-    entity === 'mixer'
-  ) {
-    return 'dangerous';
+/** Share of analyzed inflow (0..1) from whitelist + labeled exchange paths. */
+export function computeExchangeTrustedShare01(
+  rows: VolumeWeightedSourceRow[]
+): number {
+  const analyzed = rows.reduce((s, r) => s + r.volumeShare, 0);
+  if (analyzed <= 0) return 0;
+  let ex = 0;
+  for (const r of rows) {
+    const bucket = classifySourceBucket({
+      address: r.counterpartyAddress,
+      entity: r.entity,
+      flags: r.flags,
+      blacklistCategory: r.blacklistCategory,
+    });
+    if (bucket !== 'trusted') continue;
+    if (
+      isStrongWhitelistedExchange(r.counterpartyAddress) ||
+      r.entity === 'exchange' ||
+      r.blacklistCategory === 'EXCHANGE'
+    ) {
+      ex += r.volumeShare;
+    }
   }
-  if (entity === 'gambling') return 'dangerous';
-
-  if (entity === 'exchange' || entity === 'payment_processor') {
-    return 'trusted';
-  }
-
-  return 'suspicious';
+  return ex / analyzed;
 }
 
 /**
@@ -91,8 +111,18 @@ export function computeVolumeWeightedSourceBreakdown(
 
   for (const row of rows) {
     const wPct = row.volumeShare * 100;
-    const bucket = categorizeAmlSourceBucket(row.entity, row.flags);
-    const label = labelForRow(row.entity, row.flags, bucket);
+    const bucket = classifySourceBucket({
+      address: row.counterpartyAddress,
+      entity: row.entity,
+      flags: row.flags,
+      blacklistCategory: row.blacklistCategory,
+    });
+    const label = labelForRow(
+      row.counterpartyAddress,
+      row.entity,
+      row.flags,
+      bucket
+    );
 
     if (bucket === 'dangerous') {
       dangerous += wPct;
