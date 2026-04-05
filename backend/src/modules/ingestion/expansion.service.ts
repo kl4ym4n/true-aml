@@ -7,7 +7,7 @@ import {
 import { TransactionAnalyzer } from '../address-check/address-check.transaction-analyzer';
 import { BlockchainClientFactory } from '../../lib/clients';
 import { env } from '../../config/env';
-import { detectEntityType } from '../address-check/address-check.utils/entity-type-detection';
+import { detectEntityType } from '../address-check/address-check.utils';
 import { GraphCrawlerService } from './graph-crawler.service';
 import {
   computeDerivedExpansionConfidence,
@@ -147,96 +147,92 @@ export class ExpansionService {
       const existingRows = await prisma.blacklistedAddress.findMany({
         where: { address: { in: candidateAddresses } },
       });
-      const existingByAddress = new Map(
-        existingRows.map(r => [r.address, r])
-      );
+      const existingByAddress = new Map(existingRows.map(r => [r.address, r]));
 
       const rootConfidence = root.confidence ?? root.riskScore / 100;
 
-      const ops = entries.map(
-        async ({ address, volume, share, txCount }) => {
-          const existing = existingByAddress.get(address);
+      const ops = entries.map(async ({ address, volume, share, txCount }) => {
+        const existing = existingByAddress.get(address);
 
-          if (existing && !existing.isDerived) {
-            skippedExistingDirect++;
-            return 0;
-          }
-
-          const derivedConfidence = computeDerivedExpansionConfidence({
-            rootConfidence,
-            share,
-            volume,
-            txCount,
-            depth: COUNTERPARTY_HOP_DEPTH,
-          });
-
-          const nextCategory = mergeCategoryForExpansion({ existing });
-          const nextConfidence = existing
-            ? Math.max(existing.confidence ?? 0, derivedConfidence)
-            : derivedConfidence;
-
-          const prov = derivedProvenanceEntry({
-            rootAddress: root.address,
-            rootSource: root.source,
-            confidenceContribution: derivedConfidence,
-          });
-          const nextSourcesJson = mergeSourceProvenance(
-            existing?.sourcesJson,
-            [prov]
-          );
-          const nextSourceSummary = sourcesSummary(
-            provenanceEntriesFromJson(
-              nextSourcesJson as unknown as Prisma.JsonValue
-            )
-          );
-
-          const nextIsDerived = true;
-          const nextDerivedFrom =
-            existing?.derivedFrom ?? root.address;
-          const nextDepth = existing
-            ? Math.max(existing.depth ?? 0, COUNTERPARTY_HOP_DEPTH)
-            : COUNTERPARTY_HOP_DEPTH;
-
-          const inferredEt = detectEntityType(address, {
-            uniqueCounterpartyCount: Math.max(1, Math.floor(txCount * 2.2)),
-            txCount,
-            maxCounterpartyShare: share,
-          });
-          const nextEntityType =
-            inferredEt !== 'unknown' ? inferredEt : existing?.entityType ?? null;
-
-          await prisma.blacklistedAddress.upsert({
-            where: { address },
-            create: {
-              address,
-              category: nextCategory,
-              confidence: nextConfidence,
-              riskScore: Math.round(nextConfidence * 100),
-              source: nextSourceSummary,
-              sourcesJson: nextSourcesJson,
-              depth: nextDepth,
-              entityType: nextEntityType,
-              isDerived: nextIsDerived,
-              derivedFrom: nextDerivedFrom,
-            },
-            update: {
-              category: nextCategory,
-              confidence: nextConfidence,
-              riskScore: Math.round(nextConfidence * 100),
-              source: nextSourceSummary,
-              sourcesJson: nextSourcesJson,
-              depth: nextDepth,
-              entityType: nextEntityType ?? existing?.entityType,
-              isDerived: nextIsDerived,
-              derivedFrom: nextDerivedFrom,
-            },
-          });
-          if (env.crawler.enabled && env.crawler.enqueueFromExpansion) {
-            crawlerExpansionAddresses.push(address);
-          }
-          return 1;
+        if (existing && !existing.isDerived) {
+          skippedExistingDirect++;
+          return 0;
         }
-      );
+
+        const derivedConfidence = computeDerivedExpansionConfidence({
+          rootConfidence,
+          share,
+          volume,
+          txCount,
+          depth: COUNTERPARTY_HOP_DEPTH,
+        });
+
+        const nextCategory = mergeCategoryForExpansion({ existing });
+        const nextConfidence = existing
+          ? Math.max(existing.confidence ?? 0, derivedConfidence)
+          : derivedConfidence;
+
+        const prov = derivedProvenanceEntry({
+          rootAddress: root.address,
+          rootSource: root.source,
+          confidenceContribution: derivedConfidence,
+        });
+        const nextSourcesJson = mergeSourceProvenance(existing?.sourcesJson, [
+          prov,
+        ]);
+        const nextSourceSummary = sourcesSummary(
+          provenanceEntriesFromJson(
+            nextSourcesJson as unknown as Prisma.JsonValue
+          )
+        );
+
+        const nextIsDerived = true;
+        const nextDerivedFrom = existing?.derivedFrom ?? root.address;
+        const nextDepth = existing
+          ? Math.max(existing.depth ?? 0, COUNTERPARTY_HOP_DEPTH)
+          : COUNTERPARTY_HOP_DEPTH;
+
+        const inferredEt = detectEntityType(address, {
+          uniqueCounterpartyCount: Math.max(1, Math.floor(txCount * 2.2)),
+          txCount,
+          maxCounterpartyShare: share,
+        });
+        const nextEntityType =
+          inferredEt !== 'unknown'
+            ? inferredEt
+            : (existing?.entityType ?? null);
+
+        await prisma.blacklistedAddress.upsert({
+          where: { address },
+          create: {
+            address,
+            category: nextCategory,
+            confidence: nextConfidence,
+            riskScore: Math.round(nextConfidence * 100),
+            source: nextSourceSummary,
+            sourcesJson: nextSourcesJson,
+            depth: nextDepth,
+            entityType: nextEntityType,
+            isDerived: nextIsDerived,
+            derivedFrom: nextDerivedFrom,
+          },
+          update: {
+            category: nextCategory,
+            confidence: nextConfidence,
+            riskScore: Math.round(nextConfidence * 100),
+            source: nextSourceSummary,
+            sourcesJson: nextSourcesJson,
+            depth: nextDepth,
+            entityType: nextEntityType ?? existing?.entityType,
+            isDerived: nextIsDerived,
+            derivedFrom: nextDerivedFrom,
+          },
+        });
+        if (env.crawler.enabled && env.crawler.enqueueFromExpansion) {
+          crawlerExpansionAddresses.push(address);
+        }
+        return 1;
+      });
 
       const counts = await Promise.all(ops);
       derivedUpserted += counts.reduce<number>((a, b) => a + b, 0);

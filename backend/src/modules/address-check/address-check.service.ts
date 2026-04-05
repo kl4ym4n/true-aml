@@ -41,7 +41,7 @@ import {
   SMALL_TAINT_PERCENT_MULTIPLIER,
 } from './address-check.utils/advanced-risk.constants';
 import { computeBehavioralPatternScore } from './address-check.utils';
-import type { VolumeWeightedSourceRow } from './address-check.utils/source-breakdown';
+import type { VolumeWeightedSourceRow } from './address-check.utils';
 import type { TransactionPatterns } from './address-check.pattern-analyzer';
 
 const MAX_HOP_LEVEL = 1;

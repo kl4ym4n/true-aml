@@ -27,11 +27,7 @@ export function queuePriorityForSeed(
   return base + c;
 }
 
-function clamp(
-  value: number,
-  min: number,
-  max: number
-): number {
+function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
@@ -189,13 +185,12 @@ export function mergeRiskyContributorRoots(
   signalConfidence: number
 ): { roots: string[]; signalMultiplier: number } {
   const prev = Array.isArray(existingJson)
-    ? (existingJson as unknown[]).filter((x): x is string => typeof x === 'string')
+    ? (existingJson as unknown[]).filter(
+        (x): x is string => typeof x === 'string'
+      )
     : [];
   const set = new Set(prev);
-  if (
-    rootAddress &&
-    signalConfidence >= MIN_ROOT_SIGNAL_FOR_CONTRIBUTOR
-  ) {
+  if (rootAddress && signalConfidence >= MIN_ROOT_SIGNAL_FOR_CONTRIBUTOR) {
     set.add(rootAddress);
   }
   const roots = [...set].slice(0, MAX_STORED_ROOTS);

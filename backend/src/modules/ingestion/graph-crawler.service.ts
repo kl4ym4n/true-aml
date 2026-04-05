@@ -6,7 +6,7 @@ import { BlockchainClientFactory } from '../../lib/clients';
 import { mapWithConcurrency } from '../address-check/address-check.utils';
 import { TransactionAnalyzer } from '../address-check/address-check.transaction-analyzer';
 import { getWhitelistLevel } from '../address-check/address-check.utils';
-import { detectEntityType } from '../address-check/address-check.utils/entity-type-detection';
+import { detectEntityType } from '../address-check/address-check.utils';
 import {
   combineConfidenceProbabilistic,
   computeCrawlerSignalConfidence,
@@ -666,9 +666,9 @@ export class GraphCrawlerService {
           ? ('exchange' as const)
           : detectedEt !== 'unknown'
             ? detectedEt
-            : suggestEntityTypeFromHeuristics({
+            : (suggestEntityTypeFromHeuristics({
                 isWhitelistedExchange: false,
-              }) ?? existing?.entityType;
+              }) ?? existing?.entityType);
 
       const infra = isLikelyInfrastructureCandidate({
         address: e.address,

@@ -185,10 +185,7 @@ export class RiskCalculator {
 
     // Volume-based direct risk (incoming TRC20 volume heuristics).
     // Skip for CEX-like wallets — large inflow is baseline, not layering risk.
-    if (
-      patterns?.totalIncoming &&
-      !isExchangeLikePattern(patterns)
-    ) {
+    if (patterns?.totalIncoming && !isExchangeLikePattern(patterns)) {
       if (patterns.totalIncoming > 1_000_000) {
         directRisk += 25;
         console.log(

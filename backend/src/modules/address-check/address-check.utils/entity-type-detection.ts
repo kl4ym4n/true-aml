@@ -24,9 +24,7 @@ export function detectEntityType(
   patterns?: TransactionPatterns | null
 ): PrismaEntityType {
   const liq =
-    stats.liquidityPoolInteractions ??
-    patterns?.liquidityPoolInteractions ??
-    0;
+    stats.liquidityPoolInteractions ?? patterns?.liquidityPoolInteractions ?? 0;
   const swap = stats.swapLikeRatio ?? patterns?.swapLikeRatio ?? 0;
 
   if (liq >= 2 || swap >= 0.38) {
