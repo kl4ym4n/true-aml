@@ -1,5 +1,6 @@
 import type { EntityType as PrismaEntityType } from '@prisma/client';
 import type { TransactionPatterns } from '../address-check.pattern-analyzer';
+import { isStrongWhitelistedExchange } from './whitelist';
 
 /**
  * On-chain / graph stats for MVP entity typing (TRON today).
@@ -19,10 +20,14 @@ export interface EntityDetectionStats {
  * Prefer provider tags via {@link classifyEntity} when available; this fills gaps.
  */
 export function detectEntityType(
-  _address: string,
+  address: string,
   stats: EntityDetectionStats,
   patterns?: TransactionPatterns | null
 ): PrismaEntityType {
+  if (isStrongWhitelistedExchange(address)) {
+    return 'exchange';
+  }
+
   const liq =
     stats.liquidityPoolInteractions ?? patterns?.liquidityPoolInteractions ?? 0;
   const swap = stats.swapLikeRatio ?? patterns?.swapLikeRatio ?? 0;

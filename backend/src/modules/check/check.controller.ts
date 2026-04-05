@@ -76,6 +76,9 @@ export const checkAddress = async (
           ...(metadata.scoreBreakdown !== undefined && {
             scoreBreakdown: metadata.scoreBreakdown,
           }),
+          ...(metadata.sourceFlowCalibration !== undefined && {
+            sourceFlowCalibration: metadata.sourceFlowCalibration,
+          }),
           ...(metadata.explanation !== undefined &&
             metadata.explanation.length > 0 && {
               explanation: metadata.explanation,

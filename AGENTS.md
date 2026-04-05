@@ -482,3 +482,138 @@ Better:
 
 Than:
 - mark clean wallets as risky
+
+
+# TRUSTED SOURCES / EXCHANGE RULES
+
+## 1. STRONG_WHITELIST = TRUSTED EXCHANGE SIGNAL
+
+If an address is in STRONG_WHITELIST, treat it as:
+
+- trusted source
+- exchange entity
+- high-confidence semantic signal
+
+It must NOT be placed into suspicious by default.
+
+---
+
+## 2. TRUSTED SOURCES MUST AFFECT BREAKDOWN
+
+If counterparty is:
+
+- in STRONG_WHITELIST
+- or entityType == exchange
+- or entityType == payment_processor
+
+then its flow must go to:
+
+- trusted
+
+and NOT to:
+
+- suspicious
+
+---
+
+## 3. SOURCE BUCKET PRIORITY IS STRICT
+
+Always classify buckets in this order:
+
+1. trusted
+2. dangerous
+3. suspicious
+
+Meaning:
+
+- trusted exchange-like flow must be recognized before fallback classification
+- dangerous categories still override if direct evidence exists
+- suspicious is fallback, not default for everything unknown
+
+---
+
+## 4. NEVER SHOW EXCHANGE-HEAVY WALLETS AS 100% SUSPICIOUS
+
+If most inflow comes from exchange-like or whitelisted CEX addresses, breakdown must reflect that.
+
+Bad:
+- Trusted: 0%
+- Suspicious: 100%
+
+Good:
+- Trusted: high
+- Suspicious: moderate/low
+- Dangerous: small if present
+
+---
+
+## 5. TRUSTED FLOW MUST SUPPRESS RISK
+
+If trustedShare is high:
+
+- reduce behavioral impact
+- reduce suspicious interpretation
+- soften final score
+
+But:
+- do NOT erase real dangerous taint completely
+
+---
+
+## 6. SMALL DANGEROUS TAINT MUST REMAIN VISIBLE
+
+Even if wallet is mostly trusted, small dangerous exposure must still appear in:
+
+- dangerous share
+- AML explanation
+- final risk uplift
+
+Do not hide sanctions / gambling / enforcement just because trusted share is dominant.
+
+---
+
+## 7. ENTITY TYPE MUST BE USED, NOT JUST DETECTED
+
+Detecting entityType = exchange is not enough.
+
+It must affect:
+- source-of-funds breakdown
+- taint classification
+- behavioral suppression
+- explanation text
+- final score calibration
+
+---
+
+## 8. SUSPICIOUS IS FALLBACK, NOT DEFAULT
+
+Do not use logic like:
+
+- "if not dangerous => suspicious"
+
+Use logic like:
+
+- if trusted => trusted
+- else if dangerous => dangerous
+- else => suspicious
+
+---
+
+## 9. WHITELIST IS STRONGER THAN WEAK HEURISTICS
+
+If STRONG_WHITELIST says exchange, this should override weaker graph suspicion.
+
+Priority:
+1. whitelist
+2. direct source evidence
+3. entity heuristics
+4. fallback unknown
+
+---
+
+## 10. FINAL RULE
+
+Trusted exchange flow is a semantic signal, not just a cosmetic label.
+
+If the model detects or knows exchange flow but still outputs 100% suspicious,
+the model is semantically wrong even if the raw risk score is low.

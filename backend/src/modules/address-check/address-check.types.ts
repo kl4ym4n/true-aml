@@ -25,6 +25,28 @@ export interface SourceBreakdown {
   dangerous: Record<string, number>;
 }
 
+/** Trust / SoF calibration emitted on root hop for debugging and UI alignment. */
+export interface SourceFlowCalibration {
+  trustedShare: number;
+  suspiciousShare: number;
+  dangerousShare: number;
+  exchangeShare: number;
+  whitelistMatchedCount: number;
+  trustedSuppressionApplied: boolean;
+  /** Multiplier from post-blend trust layer (1 = none). */
+  trustedSuppressionFactor: number;
+  /** Multiplier applied to behavioral component from trusted inflow share. */
+  behavioralTrustMultiplier: number;
+  dangerousUplift: number;
+  /** Weighted AML blend before trust-layer calibration. */
+  amlWeightedBlendScore: number;
+  counterpartyBuckets?: Array<{
+    address: string;
+    bucket: 'trusted' | 'suspicious' | 'dangerous';
+    volumeSharePercent: number;
+  }>;
+}
+
 export interface AddressAnalysisMetadata {
   address: string;
   isBlacklisted: boolean;
@@ -92,10 +114,13 @@ export interface AddressAnalysisMetadata {
     taintScore: number;
     behavioralScore: number;
     volumeScore: number;
+    /** Weighted AML blend before trusted-flow calibration. */
+    amlWeightedBlendScore?: number;
     preWhitelistScore: number;
     whitelistLevel?: 'strong' | 'soft';
     postWhitelistScore: number;
   };
+  sourceFlowCalibration?: SourceFlowCalibration;
 }
 
 export interface AddressAnalysisResult {

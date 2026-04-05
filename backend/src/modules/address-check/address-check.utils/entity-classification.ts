@@ -1,6 +1,7 @@
 import type { AddressSecurity } from '../address-check.risk-calculator';
 import type { TransactionPatterns } from '../address-check.pattern-analyzer';
 import { detectEntityType } from './entity-type-detection';
+import { isStrongWhitelistedExchange } from './whitelist';
 
 export type EntityType =
   | 'mixer'
@@ -74,6 +75,10 @@ export function resolveCounterpartyEntity(
   volShare: number,
   counterpartyTxCount: number
 ): EntityType {
+  if (isStrongWhitelistedExchange(address)) {
+    return 'exchange';
+  }
+
   const tagged = classifyEntity(addressSecurity, null, null);
   if (
     tagged === 'sanctions' ||

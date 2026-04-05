@@ -38,6 +38,12 @@ const STRONG_WHITELIST = new Set<string>([
 // Soft whitelist: reduce score by 70% (score *= 0.3)
 const SOFT_WHITELIST = new Set<string>([]);
 
+/** Known major CEX hot/cold wallets — trusted exchange signal for SoF, taint, and scoring. */
+export function isStrongWhitelistedExchange(address: string): boolean {
+  if (!address) return false;
+  return STRONG_WHITELIST.has(address);
+}
+
 export function getWhitelistLevel(address: string): WhitelistLevel | null {
   if (!address) return null;
   if (STRONG_WHITELIST.has(address)) {
