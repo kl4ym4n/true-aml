@@ -20,12 +20,15 @@ import {
   fetchAddressContext,
   buildLiquidityPoolInfo,
   computeSourceBreakdown,
+  computeVolumeWeightedSourceBreakdown,
   buildAnalysisMetadata,
   updateAddressProfile,
   createSkipResult,
   getVolumeScore,
   getWhitelistLevel,
   WhitelistLevel,
+  resolveCounterpartyEntity,
+  isAmlRiskyCounterparty,
 } from './address-check.utils';
 import { AdvancedRiskCalculator } from './address-check.utils';
 import { LruCache } from './address-check.utils';
@@ -34,9 +37,11 @@ import {
   getEntityRiskWeight,
   taintHopWeight,
   TAINT_TIME_DECAY_LAMBDA,
+  TAINT_EXP_K,
+  SMALL_TAINT_PERCENT_MULTIPLIER,
 } from './address-check.utils/advanced-risk.constants';
-import { classifyEntity } from './address-check.utils';
 import { computeBehavioralPatternScore } from './address-check.utils';
+import type { VolumeWeightedSourceRow } from './address-check.utils/source-breakdown';
 import type { TransactionPatterns } from './address-check.pattern-analyzer';
 
 const MAX_HOP_LEVEL = 1;
@@ -265,6 +270,7 @@ export class AddressCheckService {
       behavioralScore,
       volumeScore,
       explanation,
+      taintBreakdownRows,
     } = await this.runMultiHopIfNeeded(
       address,
       hopLevel,
@@ -291,7 +297,11 @@ export class AddressCheckService {
       transactionCount
     );
     const sourceBreakdown =
-      hopLevel === 0 ? computeSourceBreakdown(hopEntityFlags) : undefined;
+      hopLevel === 0 && taintBreakdownRows && taintBreakdownRows.length > 0
+        ? computeVolumeWeightedSourceBreakdown(taintBreakdownRows)
+        : hopLevel === 0
+          ? computeSourceBreakdown(hopEntityFlags)
+          : undefined;
 
     const finalFlags =
       flagsFromOtherHops.length > 0
@@ -427,6 +437,7 @@ export class AddressCheckService {
       truncated: boolean;
     };
     explanation: string[];
+    taintBreakdownRows?: VolumeWeightedSourceRow[];
   }> {
     const emptyTaintInput = {
       symbols: ['USDT', 'USDC'] as string[],
@@ -474,6 +485,7 @@ export class AddressCheckService {
         volumeScore,
         taintInput,
         explanation: [],
+        taintBreakdownRows: undefined,
       };
     }
 
@@ -533,6 +545,7 @@ export class AddressCheckService {
         volumeScore,
         taintInput,
         explanation: aml.explanation,
+        taintBreakdownRows: undefined,
       };
     }
 
@@ -563,7 +576,7 @@ export class AddressCheckService {
       cp: string;
       incomingVolume: number;
       result: AddressAnalysisResult;
-      entity: ReturnType<typeof classifyEntity>;
+      entity: ReturnType<typeof resolveCounterpartyEntity>;
       rw: number;
     };
 
@@ -590,9 +603,14 @@ export class AddressCheckService {
         const lastDays =
           TransactionAnalyzer.lastActivityDaysFromTransactions(txs);
         const decay = Math.exp(-TAINT_TIME_DECAY_LAMBDA * lastDays);
-        const entity = classifyEntity(sec, null, null);
-        const rw = getEntityRiskWeight(entity);
         const volShare = incomingVolume / totalVolume;
+        const entity = resolveCounterpartyEntity(
+          cp,
+          sec,
+          volShare,
+          result.metadata.transactionCount
+        );
+        const rw = getEntityRiskWeight(entity);
         const contrib = volShare * rw * taintHopWeight(1) * decay;
         const hint = `${(volShare * 100).toFixed(1)}% from ${entity} (hop 1, weight ${rw.toFixed(2)})`;
 
@@ -617,7 +635,14 @@ export class AddressCheckService {
       else hop1Misses++;
       cumulativeTaintRaw += r.contrib;
       taintHints.push(r.hint);
-      if (r.rw >= 0.5) {
+      if (
+        isAmlRiskyCounterparty({
+          entity: r.entity,
+          flags: r.result.flags,
+          entityRiskWeight: r.rw,
+          isMetadataBlacklisted: !!r.result.metadata?.isBlacklisted,
+        })
+      ) {
         riskyIncomingVolume += r.incomingVolume;
       }
     }
@@ -637,13 +662,12 @@ export class AddressCheckService {
         entity: row.entity,
         rw: row.rw,
       });
-      const isRisky =
-        row.result.metadata?.isBlacklisted ||
-        row.result.flags.includes('blacklisted') ||
-        row.result.flags.includes('scam') ||
-        row.result.flags.includes('phishing') ||
-        row.result.flags.includes('malicious') ||
-        row.rw >= 0.5;
+      const isRisky = isAmlRiskyCounterparty({
+        entity: row.entity,
+        flags: row.result.flags,
+        entityRiskWeight: row.rw,
+        isMetadataBlacklisted: !!row.result.metadata?.isBlacklisted,
+      });
       topRiskyCounterparties.push({
         address: row.cp,
         incomingVolume: Math.round(row.incomingVolume * 100) / 100,
@@ -680,13 +704,24 @@ export class AddressCheckService {
           -TAINT_TIME_DECAY_LAMBDA *
             TransactionAnalyzer.lastActivityDaysFromTransactions(txsT)
         );
-        const entityT = classifyEntity(secT, null, null);
+        const entityT = resolveCounterpartyEntity(
+          tAddr,
+          secT,
+          beta,
+          txsT.length
+        );
         const rwT = getEntityRiskWeight(entityT);
         cumulativeTaintRaw += pathShare * rwT * taintHopWeight(2) * decayT;
         taintHints.push(
           `${(pathShare * 100).toFixed(2)}% path via ${entityT} (hop 2)`
         );
-        if (rwT >= 0.5) {
+        if (
+          isAmlRiskyCounterparty({
+            entity: entityT,
+            flags: [],
+            entityRiskWeight: rwT,
+          })
+        ) {
           riskyIncomingVolume += pathShare * totalVolume;
         }
       }
@@ -725,7 +760,12 @@ export class AddressCheckService {
               -TAINT_TIME_DECAY_LAMBDA *
                 TransactionAnalyzer.lastActivityDaysFromTransactions(txsU)
             );
-            const entityU = classifyEntity(secU, null, null);
+            const entityU = resolveCounterpartyEntity(
+              uAddr,
+              secU,
+              gamma,
+              txsU.length
+            );
             const rwU = getEntityRiskWeight(entityU);
             cumulativeTaintRaw += pathShare * rwU * taintHopWeight(3) * decayU;
             taintHints.push(
@@ -743,9 +783,24 @@ export class AddressCheckService {
 
     const normalizedTaint = Math.min(
       1,
-      1 - Math.exp(-cumulativeTaintRaw * 1.5)
+      1 - Math.exp(-cumulativeTaintRaw * TAINT_EXP_K)
     );
     taintScore = Math.round(normalizedTaint * 10000) / 100;
+    if (taintPercent > 0 && taintPercent < 6) {
+      taintScore = Math.min(
+        100,
+        taintScore + taintPercent * SMALL_TAINT_PERCENT_MULTIPLIER
+      );
+      taintScore = Math.round(taintScore * 100) / 100;
+    }
+
+    const taintBreakdownRows: VolumeWeightedSourceRow[] = hop1Results
+      .filter((r): r is NonNullable<(typeof hop1Results)[number]> => r != null)
+      .map(r => ({
+        volumeShare: r.incomingVolume / totalVolume,
+        entity: r.entity,
+        flags: r.result.flags,
+      }));
 
     behavioralScore = computeBehavioralPatternScore(patterns);
     volumeScore = getVolumeScore(totalIncomingVolume);
@@ -774,6 +829,7 @@ export class AddressCheckService {
       volumeScore,
       taintInput,
       explanation: aml.explanation,
+      taintBreakdownRows,
     };
   }
 }

@@ -410,3 +410,75 @@ instead of:
 
 A missed suspicious candidate can be revisited later.
 A poisoned blacklist damages the whole AML system.
+
+
+# ENTITY LAYER RULES
+
+## 1. ENTITY ≠ RISK
+
+- entityType describes behavior (exchange, mixer, etc.)
+- category describes risk (scam, sanction, etc.)
+
+Never mix them.
+
+---
+
+## 2. EXCHANGE IS NOT RISK
+
+- exchange activity is normal
+- high volume + high frequency ≠ malicious
+
+Always apply suppression to exchange-like entities.
+
+---
+
+## 3. SMALL TAINT MATTERS
+
+- even 1% sanctions is meaningful
+- never ignore low-percentage risk
+
+---
+
+## 4. GRAPH ≠ TRUTH
+
+- graph signals are probabilistic
+- direct sources are stronger
+
+---
+
+## 5. DO NOT OVERCLASSIFY
+
+Prefer:
+- suspicious
+
+Avoid:
+- false SCAM/SANCTION labels
+
+---
+
+## 6. BREAKDOWN MUST BE REALISTIC
+
+Never output:
+- 100% suspicious
+
+Always split:
+- trusted
+- suspicious
+- dangerous
+
+---
+
+## 7. BEHAVIOR IS SECONDARY
+
+- behavior alone is not risk
+- taint > behavior
+
+---
+
+## 8. FINAL RULE
+
+Better:
+- miss some risky wallets
+
+Than:
+- mark clean wallets as risky

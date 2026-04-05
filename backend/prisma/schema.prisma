@@ -28,6 +28,8 @@ enum EntityType {
   mixer
   bridge
   lp
+  liquidity_pool
+  payment_processor
   unknown
 }
 
@@ -153,6 +155,8 @@ model CandidateSignal {
   hopDepth                 Int         @default(0)
   entityType               EntityType?
   isInfrastructure         Boolean     @default(false)
+  /// Distinct crawl roots that contributed a non-trivial graph signal (for multi-root boost).
+  riskyContributorRoots    Json?
   sourcesJson              Json?
   promotedAt               DateTime?
   createdAt                DateTime    @default(now())

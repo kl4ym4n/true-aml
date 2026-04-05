@@ -7,6 +7,7 @@ import {
 import { TransactionAnalyzer } from '../address-check/address-check.transaction-analyzer';
 import { BlockchainClientFactory } from '../../lib/clients';
 import { env } from '../../config/env';
+import { detectEntityType } from '../address-check/address-check.utils/entity-type-detection';
 import { GraphCrawlerService } from './graph-crawler.service';
 import {
   computeDerivedExpansionConfidence,
@@ -196,6 +197,14 @@ export class ExpansionService {
             ? Math.max(existing.depth ?? 0, COUNTERPARTY_HOP_DEPTH)
             : COUNTERPARTY_HOP_DEPTH;
 
+          const inferredEt = detectEntityType(address, {
+            uniqueCounterpartyCount: Math.max(1, Math.floor(txCount * 2.2)),
+            txCount,
+            maxCounterpartyShare: share,
+          });
+          const nextEntityType =
+            inferredEt !== 'unknown' ? inferredEt : existing?.entityType ?? null;
+
           await prisma.blacklistedAddress.upsert({
             where: { address },
             create: {
@@ -206,7 +215,7 @@ export class ExpansionService {
               source: nextSourceSummary,
               sourcesJson: nextSourcesJson,
               depth: nextDepth,
-              entityType: null,
+              entityType: nextEntityType,
               isDerived: nextIsDerived,
               derivedFrom: nextDerivedFrom,
             },
@@ -217,6 +226,7 @@ export class ExpansionService {
               source: nextSourceSummary,
               sourcesJson: nextSourcesJson,
               depth: nextDepth,
+              entityType: nextEntityType ?? existing?.entityType,
               isDerived: nextIsDerived,
               derivedFrom: nextDerivedFrom,
             },

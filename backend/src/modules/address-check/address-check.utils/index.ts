@@ -11,7 +11,14 @@ export type { AddressContext } from './address-context';
 export { buildLiquidityPoolInfo } from './liquidity';
 export type { LiquidityPoolInfo } from './liquidity';
 
-export { computeSourceBreakdown } from './source-breakdown';
+export {
+  computeSourceBreakdown,
+  computeVolumeWeightedSourceBreakdown,
+} from './source-breakdown';
+export type { VolumeWeightedSourceRow } from './source-breakdown';
+export { detectEntityType } from './entity-type-detection';
+export type { EntityDetectionStats } from './entity-type-detection';
+export { isAmlRiskyCounterparty } from './counterparty-risk';
 
 export { buildAnalysisMetadata } from './metadata';
 export type { BuildMetadataParams } from './metadata';
@@ -33,6 +40,9 @@ export type { WhitelistLevel } from './whitelist';
 export { AdvancedRiskCalculator } from './advanced-risk-calculator';
 export { LruCache } from './lru-cache';
 export { mapWithConcurrency } from './concurrency';
-export { classifyEntity } from './entity-classification';
+export {
+  classifyEntity,
+  resolveCounterpartyEntity,
+} from './entity-classification';
 export type { EntityType } from './entity-classification';
 export { computeBehavioralPatternScore } from './behavioral-pattern-score';
