@@ -145,6 +145,23 @@
   margin-bottom: 0.75rem;
 }
 
+.bucketHint {
+  margin: 0 0 0.65rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #666;
+}
+
+.pctOfBucket {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: #777;
+}
+
+.sourceCategorySuspicious > .sourceCategoryHeader {
+  margin-bottom: 0.35rem;
+}
+
 .sourceCategoryIcon {
   color: #198754;
   font-size: 1rem;

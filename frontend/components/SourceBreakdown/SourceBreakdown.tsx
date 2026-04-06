@@ -28,6 +28,10 @@ function fundSourceInsight(s: {
   return null;
 }
 
+function sortEntriesDesc(entries: [string, number][]): [string, number][] {
+  return [...entries].sort((a, b) => b[1] - a[1]);
+}
+
 export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProps) {
   const s = sourceBreakdown.summary;
   const insight = s ? fundSourceInsight(s) : null;
@@ -35,6 +39,10 @@ export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProp
   const t = s ? Math.max(0, s.trusted) : 0;
   const u = s ? Math.max(0, s.suspicious) : 0;
   const d = s ? Math.max(0, s.dangerous) : 0;
+
+  const trustedRows = sortEntriesDesc(Object.entries(sourceBreakdown.trusted));
+  const suspiciousRows = sortEntriesDesc(Object.entries(sourceBreakdown.suspicious));
+  const dangerousRows = sortEntriesDesc(Object.entries(sourceBreakdown.dangerous));
 
   return (
     <div className={styles.sourceBreakdown}>
@@ -90,12 +98,20 @@ export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProp
             <span>Trusted sources</span>
           </div>
           <ul className={styles.sourceList}>
-            {Object.entries(sourceBreakdown.trusted)
+            {trustedRows
               .filter(([, pct]) => pct > 0)
               .map(([name, pct]) => (
                 <li key={name} className={styles.sourceRow}>
                   <span>{name}</span>
-                  <span>{pct.toFixed(2)}%</span>
+                  <span>
+                    {pct.toFixed(2)}% of inflow
+                    {t > 0 && (
+                      <span className={styles.pctOfBucket}>
+                        {' '}
+                        ({((pct / t) * 100).toFixed(0)}% of trusted)
+                      </span>
+                    )}
+                  </span>
                 </li>
               ))}
             {Object.values(sourceBreakdown.trusted).every(v => v <= 0) && (
@@ -108,13 +124,24 @@ export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProp
             <span className={styles.sourceCategoryIconSuspicious} aria-hidden>⚠</span>
             <span>Suspicious sources</span>
           </div>
+          <p className={styles.bucketHint}>
+            Sub-types below sum to the suspicious share (unknown peers, DeFi-style flow, DB flags, etc.).
+          </p>
           <ul className={styles.sourceList}>
-            {Object.entries(sourceBreakdown.suspicious)
+            {suspiciousRows
               .filter(([, pct]) => pct > 0)
               .map(([name, pct]) => (
                 <li key={name} className={styles.sourceRow}>
                   <span>{name}</span>
-                  <span>{pct.toFixed(2)}%</span>
+                  <span>
+                    {pct.toFixed(2)}% of inflow
+                    {u > 0 && (
+                      <span className={styles.pctOfBucket}>
+                        {' '}
+                        ({((pct / u) * 100).toFixed(0)}% of suspicious)
+                      </span>
+                    )}
+                  </span>
                 </li>
               ))}
             {Object.values(sourceBreakdown.suspicious).every(v => v <= 0) && (
@@ -128,12 +155,20 @@ export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProp
             <span>Dangerous sources</span>
           </div>
           <ul className={styles.sourceList}>
-            {Object.entries(sourceBreakdown.dangerous)
+            {dangerousRows
               .filter(([, pct]) => pct > 0)
               .map(([name, pct]) => (
                 <li key={name} className={styles.sourceRow}>
                   <span>{name}</span>
-                  <span>{pct.toFixed(2)}%</span>
+                  <span>
+                    {pct.toFixed(2)}% of inflow
+                    {d > 0 && (
+                      <span className={styles.pctOfBucket}>
+                        {' '}
+                        ({((pct / d) * 100).toFixed(0)}% of dangerous)
+                      </span>
+                    )}
+                  </span>
                 </li>
               ))}
             {Object.values(sourceBreakdown.dangerous).every(v => v <= 0) && (

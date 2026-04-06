@@ -2,6 +2,7 @@ import type {
   AddressAnalysisMetadata,
   SourceBreakdown,
   SourceFlowCalibration,
+  TopCounterpartySoFDebug,
 } from '../address-check.types';
 import type { WhitelistLevel } from './whitelist';
 
@@ -46,6 +47,7 @@ export interface BuildMetadataParams {
     risky: boolean;
     entityType?: string;
     hopLevel?: number;
+    sofDebug?: TopCounterpartySoFDebug;
   }>;
   explanation?: string[];
   taintCalculationStats?: {

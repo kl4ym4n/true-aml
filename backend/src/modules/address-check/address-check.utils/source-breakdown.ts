@@ -10,13 +10,17 @@ export interface VolumeWeightedSourceRow {
   entity: string;
   flags: RiskFlag[];
   blacklistCategory?: string | null;
+  /** SoF-only: trusted via diffuse inflow heuristics (not direct entity label). */
+  exchangeLikeFallback?: boolean;
 }
 
 function labelForRow(
   counterpartyAddress: string,
   entity: string,
   flags: RiskFlag[],
-  bucket: 'trusted' | 'suspicious' | 'dangerous'
+  bucket: 'trusted' | 'suspicious' | 'dangerous',
+  exchangeLikeFallback?: boolean,
+  blacklistCategory?: string | null
 ): string {
   const f = new Set(flags);
   if (bucket === 'dangerous') {
@@ -34,19 +38,45 @@ function labelForRow(
     if (isStrongWhitelistedExchange(counterpartyAddress)) {
       return 'Known exchange (whitelist)';
     }
+    if (exchangeLikeFallback) {
+      return 'Exchange-like (inferred)';
+    }
     if (entity === 'exchange') return 'Exchange';
     if (entity === 'payment_processor') return 'PaymentProcessor';
     if (entity === 'bridge') return 'Bridge';
     return 'TrustedOther';
   }
+
+  if (bucket === 'suspicious') {
+    const cat = blacklistCategory;
+    if (cat === 'SUSPICIOUS') {
+      return 'DB: suspicious';
+    }
+    if (f.has('blacklisted')) {
+      return 'Blacklisted (review)';
+    }
+  }
+
   if (entity === 'liquidity_pool' || entity === 'defi') return 'DeFi/LP';
   if (f.has('liquidity-pool')) return 'LiquidityPool';
   if (f.has('high-frequency')) return 'HighFrequency';
   if (f.has('new-address')) return 'NewAddress';
   if (f.has('limited-counterparties')) return 'LimitedCounterparties';
+  if (f.has('low-activity')) return 'Low activity';
   if (entity === 'p2p') return 'P2P';
-  if (entity === 'unknown') return 'Unknown';
-  return entity || 'Unclassified';
+  if (entity === 'bridge') return 'Bridge';
+  if (entity === 'unknown') {
+    const bits: string[] = [];
+    if (f.has('high-frequency')) bits.push('high frequency');
+    if (f.has('new-address')) bits.push('new address');
+    if (f.has('limited-counterparties')) bits.push('few peers');
+    if (f.has('liquidity-pool')) bits.push('LP-like');
+    if (bits.length > 0) {
+      return `Unknown (${bits.join(' · ')})`;
+    }
+    return 'Peer / unlabeled';
+  }
+  return entity ? entity.charAt(0).toUpperCase() + entity.slice(1) : 'Unclassified';
 }
 
 /**
@@ -78,12 +108,14 @@ export function computeExchangeTrustedShare01(
       entity: r.entity,
       flags: r.flags,
       blacklistCategory: r.blacklistCategory,
+      exchangeLikeFallback: r.exchangeLikeFallback,
     });
     if (bucket !== 'trusted') continue;
     if (
       isStrongWhitelistedExchange(r.counterpartyAddress) ||
       r.entity === 'exchange' ||
-      r.blacklistCategory === 'EXCHANGE'
+      r.blacklistCategory === 'EXCHANGE' ||
+      r.exchangeLikeFallback
     ) {
       ex += r.volumeShare;
     }
@@ -116,12 +148,15 @@ export function computeVolumeWeightedSourceBreakdown(
       entity: row.entity,
       flags: row.flags,
       blacklistCategory: row.blacklistCategory,
+      exchangeLikeFallback: row.exchangeLikeFallback,
     });
     const label = labelForRow(
       row.counterpartyAddress,
       row.entity,
       row.flags,
-      bucket
+      bucket,
+      row.exchangeLikeFallback,
+      row.blacklistCategory
     );
 
     if (bucket === 'dangerous') {

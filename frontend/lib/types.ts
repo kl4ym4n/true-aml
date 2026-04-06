@@ -80,6 +80,17 @@ export interface AddressCheckResponse {
       risky: boolean;
       entityType?: string;
       hopLevel?: number;
+      sofDebug?: {
+        volumeShare: number;
+        txCount: number;
+        uniqueCounterpartyCount: number;
+        maxCounterpartyShare: number;
+        whitelistMatched: boolean;
+        blacklistCategory?: string | null;
+        bucket: 'trusted' | 'suspicious' | 'dangerous';
+        whyEntityResolved: string;
+        exchangeLikeFallback: boolean;
+      };
     }>;
     taintCalculationStats?: {
       maxConsidered: number;

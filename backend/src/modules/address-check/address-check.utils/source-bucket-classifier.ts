@@ -15,38 +15,41 @@ export const DANGEROUS_BLACKLIST_CATEGORIES = new Set<BlacklistCategory>([
 
 /**
  * Single priority chain for volume-weighted source buckets.
- * 1) Strong CEX whitelist → trusted
- * 2) Entity exchange / payment_processor → trusted
- * 3) DB category EXCHANGE → trusted
- * 4) Dangerous flags / categories / high-risk entities → dangerous
- * 5) Else → suspicious (not “everything suspicious by default” after trust checks)
+ * 1) Dangerous direct evidence (flags, categories, high-risk entities)
+ * 2) Strong CEX whitelist → trusted
+ * 3) Entity exchange / payment_processor → trusted
+ * 4) DB category EXCHANGE → trusted
+ * 5) SoF-only exchange-like fallback (see {@link isExchangeLikeCounterparty})
+ * 6) Else → suspicious
  */
 export function classifySourceBucket(input: {
   address: string;
   entity: string;
   flags: RiskFlag[];
   blacklistCategory?: string | null;
+  /** Set upstream when heuristics indicate CEX-like rails without explicit label. */
+  exchangeLikeFallback?: boolean;
 }): 'trusted' | 'suspicious' | 'dangerous' {
-  if (isStrongWhitelistedExchange(input.address)) {
-    return 'trusted';
-  }
-  if (
-    input.entity === 'exchange' ||
-    input.entity === 'payment_processor'
-  ) {
-    return 'trusted';
-  }
-
-  const cat = input.blacklistCategory as BlacklistCategory | undefined;
-  if (cat === 'EXCHANGE') {
-    return 'trusted';
-  }
-
   const f = new Set(input.flags);
-  if (f.has('scam') || f.has('phishing')) {
+  const cat = input.blacklistCategory as BlacklistCategory | undefined;
+
+  if (f.has('scam') || f.has('phishing') || f.has('malicious')) {
     return 'dangerous';
   }
-  if (f.has('malicious')) {
+
+  if (cat && DANGEROUS_BLACKLIST_CATEGORIES.has(cat)) {
+    return 'dangerous';
+  }
+
+  const e = input.entity;
+  if (
+    e === 'sanctions' ||
+    e === 'mixer' ||
+    e === 'darknet' ||
+    e === 'scam' ||
+    e === 'phishing' ||
+    e === 'gambling'
+  ) {
     return 'dangerous';
   }
 
@@ -60,23 +63,21 @@ export function classifySourceBucket(input: {
     return 'suspicious';
   }
 
-  if (cat && DANGEROUS_BLACKLIST_CATEGORIES.has(cat)) {
-    return 'dangerous';
-  }
   if (cat === 'SUSPICIOUS') {
     return 'suspicious';
   }
 
-  const e = input.entity;
-  if (
-    e === 'sanctions' ||
-    e === 'mixer' ||
-    e === 'darknet' ||
-    e === 'scam' ||
-    e === 'phishing' ||
-    e === 'gambling'
-  ) {
-    return 'dangerous';
+  if (isStrongWhitelistedExchange(input.address)) {
+    return 'trusted';
+  }
+  if (e === 'exchange' || e === 'payment_processor') {
+    return 'trusted';
+  }
+  if (cat === 'EXCHANGE') {
+    return 'trusted';
+  }
+  if (input.exchangeLikeFallback) {
+    return 'trusted';
   }
 
   return 'suspicious';

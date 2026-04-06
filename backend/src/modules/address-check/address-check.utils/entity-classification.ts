@@ -32,6 +32,28 @@ const TAG_HINTS: Array<{ re: RegExp; type: EntityType }> = [
 ];
 
 /**
+ * On-chain + graph stats for resolving a counterparty's entity (hop-1..3).
+ * `rootIncomingShare` = share of the analyzed root's stablecoin inflow from this counterparty (SoF context).
+ */
+export interface CounterpartyEntityStatsInput {
+  rootIncomingShare: number;
+  txCount: number;
+  uniqueCounterpartyCount: number;
+  /**
+   * For the counterparty address: max fraction of its TRC20 incoming from one sender (not parent's vol share).
+   */
+  maxCounterpartyShare: number;
+  liquidityPoolInteractions?: number;
+  swapLikeRatio?: number;
+}
+
+export interface CounterpartyEntityResolution {
+  entity: EntityType;
+  /** Short audit string for debugging SoF / entity bugs. */
+  why: string;
+}
+
+/**
  * Classify counterparty / address entity from security provider + on-chain heuristics.
  */
 export function classifyEntity(
@@ -66,20 +88,27 @@ export function classifyEntity(
   return 'unknown';
 }
 
+function securitySuggestsExchangeRail(
+  addressSecurity: AddressSecurity | null | undefined
+): boolean {
+  const tagged = classifyEntity(addressSecurity, null, null);
+  return tagged === 'exchange' || tagged === 'payment_processor';
+}
+
 /**
- * Tags first, then graph heuristics (volume share + activity) for counterparty taint.
+ * Tags first, then graph heuristics with real tx / breadth / concentration signals.
  */
 export function resolveCounterpartyEntity(
   address: string,
   addressSecurity: AddressSecurity | null | undefined,
-  volShare: number,
-  counterpartyTxCount: number
-): EntityType {
+  stats: CounterpartyEntityStatsInput,
+  patterns?: TransactionPatterns | null
+): CounterpartyEntityResolution {
   if (isStrongWhitelistedExchange(address)) {
-    return 'exchange';
+    return { entity: 'exchange', why: 'strong_whitelist' };
   }
 
-  const tagged = classifyEntity(addressSecurity, null, null);
+  const tagged = classifyEntity(addressSecurity, patterns, null);
   if (
     tagged === 'sanctions' ||
     tagged === 'scam' ||
@@ -87,19 +116,65 @@ export function resolveCounterpartyEntity(
     tagged === 'mixer' ||
     tagged === 'darknet'
   ) {
-    return tagged;
+    return { entity: tagged, why: 'security_tags_high_risk' };
   }
 
   const inferred = detectEntityType(address, {
-    uniqueCounterpartyCount: Math.max(0, counterpartyTxCount),
-    txCount: Math.max(0, counterpartyTxCount),
-    maxCounterpartyShare: volShare,
-  });
+    uniqueCounterpartyCount: Math.max(0, stats.uniqueCounterpartyCount),
+    txCount: Math.max(0, stats.txCount),
+    maxCounterpartyShare: stats.maxCounterpartyShare,
+    liquidityPoolInteractions:
+      stats.liquidityPoolInteractions ?? patterns?.liquidityPoolInteractions,
+    swapLikeRatio: stats.swapLikeRatio ?? patterns?.swapLikeRatio,
+  }, patterns);
 
-  if (inferred === 'exchange') return 'exchange';
-  if (inferred === 'mixer') return 'mixer';
-  if (inferred === 'liquidity_pool') return 'liquidity_pool';
-  if (inferred === 'payment_processor') return 'payment_processor';
+  if (inferred === 'exchange') {
+    return { entity: 'exchange', why: 'onchain_heuristic_exchange' };
+  }
+  if (inferred === 'mixer') {
+    return { entity: 'mixer', why: 'onchain_heuristic_mixer' };
+  }
+  if (inferred === 'liquidity_pool') {
+    return { entity: 'liquidity_pool', why: 'onchain_heuristic_lp' };
+  }
+  if (inferred === 'payment_processor') {
+    return { entity: 'payment_processor', why: 'onchain_heuristic_psp' };
+  }
 
-  return tagged;
+  const tx = stats.txCount;
+  const mx = stats.maxCounterpartyShare;
+  const uc = stats.uniqueCounterpartyCount;
+  const root = stats.rootIncomingShare;
+
+  if (
+    tx > 25 &&
+    root >= 0.04 &&
+    mx < 0.35 &&
+    uc >= 10 &&
+    securitySuggestsExchangeRail(addressSecurity)
+  ) {
+    return {
+      entity: 'exchange',
+      why: 'tag_assisted_exchange_candidate',
+    };
+  }
+
+  if (
+    tx > 28 &&
+    root >= 0.03 &&
+    mx < 0.32 &&
+    uc >= 8 &&
+    securitySuggestsExchangeRail(addressSecurity)
+  ) {
+    return {
+      entity: 'payment_processor',
+      why: 'tag_assisted_psp_candidate',
+    };
+  }
+
+  if (tagged !== 'unknown') {
+    return { entity: tagged, why: 'security_tags_soft' };
+  }
+
+  return { entity: 'unknown', why: 'no_matching_heuristic' };
 }

@@ -59,5 +59,14 @@ export {
   classifyEntity,
   resolveCounterpartyEntity,
 } from './entity-classification';
-export type { EntityType } from './entity-classification';
+export type {
+  EntityType,
+  CounterpartyEntityStatsInput,
+  CounterpartyEntityResolution,
+} from './entity-classification';
+
+export { computeCounterpartyOnchainStats } from './counterparty-onchain-stats';
+export type { CounterpartyOnchainStats } from './counterparty-onchain-stats';
+
+export { isExchangeLikeCounterparty } from './exchange-like';
 export { computeBehavioralPatternScore } from './behavioral-pattern-score';
