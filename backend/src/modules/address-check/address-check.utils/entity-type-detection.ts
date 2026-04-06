@@ -46,19 +46,23 @@ export function detectEntityType(
     return 'mixer';
   }
 
-  if (
-    stats.uniqueCounterpartyCount > 100 &&
-    stats.txCount > 200 &&
-    stats.maxCounterpartyShare < 0.06
-  ) {
+  const uc = stats.uniqueCounterpartyCount;
+  const tx = stats.txCount;
+  const mx = stats.maxCounterpartyShare;
+
+  if (tx > 50 && mx < 0.2 && uc >= 15) {
     return 'exchange';
   }
 
-  if (
-    stats.uniqueCounterpartyCount > 60 &&
-    stats.txCount > 120 &&
-    stats.maxCounterpartyShare < 0.09
-  ) {
+  if (tx > 40 && mx < 0.25 && uc >= 30) {
+    return 'exchange';
+  }
+
+  if (tx > 35 && mx < 0.22 && uc >= 20) {
+    return 'payment_processor';
+  }
+
+  if (tx > 28 && mx < 0.28 && uc >= 18) {
     return 'payment_processor';
   }
 

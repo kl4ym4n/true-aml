@@ -68,6 +68,7 @@ export const checkAddress = async (
               risky: cp.risky,
               ...(cp.entityType !== undefined && { entityType: cp.entityType }),
               ...(cp.hopLevel !== undefined && { hopLevel: cp.hopLevel }),
+              ...(cp.sofDebug !== undefined && { sofDebug: cp.sofDebug }),
             })),
           }),
           ...(metadata.taintCalculationStats !== undefined && {

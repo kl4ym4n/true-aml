@@ -26,6 +26,21 @@ export interface SourceBreakdown {
 }
 
 /** Trust / SoF calibration emitted on root hop for debugging and UI alignment. */
+/** Per hop-1 counterparty: SoF bucket + entity resolution audit (root check only). */
+export interface TopCounterpartySoFDebug {
+  /** Share of root stablecoin inflow from this counterparty (0..1). */
+  volumeShare: number;
+  txCount: number;
+  uniqueCounterpartyCount: number;
+  /** Counterparty's max TRC20 incoming concentration from one sender (0..1). */
+  maxCounterpartyShare: number;
+  whitelistMatched: boolean;
+  blacklistCategory?: string | null;
+  bucket: 'trusted' | 'suspicious' | 'dangerous';
+  whyEntityResolved: string;
+  exchangeLikeFallback: boolean;
+}
+
 export interface SourceFlowCalibration {
   trustedShare: number;
   suspiciousShare: number;
@@ -95,6 +110,7 @@ export interface AddressAnalysisMetadata {
     risky: boolean;
     entityType?: string;
     hopLevel?: number;
+    sofDebug?: TopCounterpartySoFDebug;
   }>;
   /** Human-readable AML explanations */
   explanation?: string[];

@@ -3,7 +3,11 @@ import { BlockchainClientFactory } from '../../lib/clients';
 import { IBlockchainClient } from '../../lib/blockchain-client.interface';
 import { env } from '../../config/env';
 import prisma from '../../config/database';
-import type { AddressAnalysisResult, RiskFlag } from './address-check.types';
+import type {
+  AddressAnalysisResult,
+  RiskFlag,
+  TopCounterpartySoFDebug,
+} from './address-check.types';
 import {
   MIN_TAINT_COUNTERPARTY_VOLUME,
   MIN_TAINT_VOLUME_SHARE_PERCENT,
@@ -32,6 +36,8 @@ import {
   getWhitelistLevel,
   WhitelistLevel,
   resolveCounterpartyEntity,
+  computeCounterpartyOnchainStats,
+  isExchangeLikeCounterparty,
   isAmlRiskyCounterparty,
 } from './address-check.utils';
 import { AdvancedRiskCalculator } from './address-check.utils';
@@ -71,6 +77,7 @@ interface TaintCounterpartyInsight {
   risky: boolean;
   entityType?: string;
   hopLevel?: number;
+  sofDebug?: TopCounterpartySoFDebug;
 }
 
 interface TaintCalculationStats {
@@ -364,9 +371,9 @@ export class AddressCheckService {
           behavioralScore: Math.round(behavioralScore * 100) / 100,
           volumeScore: Math.round(volumeScore * 100) / 100,
           ...(sourceFlowCalibration !== undefined && {
-            amlWeightedBlendScore: Math.round(
-              sourceFlowCalibration.amlWeightedBlendScore * 100
-            ) / 100,
+            amlWeightedBlendScore:
+              Math.round(sourceFlowCalibration.amlWeightedBlendScore * 100) /
+              100,
           }),
           preWhitelistScore: Math.round(finalRiskScore * 100) / 100,
           whitelistLevel,
@@ -418,6 +425,50 @@ export class AddressCheckService {
       blacklistEntry,
       addressSecurity,
       isBlacklisted: blacklistEntry !== null,
+    };
+  }
+
+  private resolveCounterpartyEntityFromTxs(
+    addr: string,
+    addressSecurity: AddressSecurity | null | undefined,
+    transactions: Transaction[],
+    rootIncomingShare: number
+  ): {
+    resolution: ReturnType<typeof resolveCounterpartyEntity>;
+    txCount: number;
+    uniqueCounterpartyCount: number;
+    maxIncomingSenderShare: number;
+  } {
+    const cpPatterns = this.patternAnalyzer.analyzeTransactionPatterns(
+      transactions,
+      null,
+      null,
+      null,
+      addr
+    );
+    const onchain = computeCounterpartyOnchainStats(transactions, addr);
+    const uc = Math.max(
+      cpPatterns.uniqueCounterparties,
+      onchain.uniqueIncomingSenders
+    );
+    const resolution = resolveCounterpartyEntity(
+      addr,
+      addressSecurity,
+      {
+        rootIncomingShare: rootIncomingShare,
+        txCount: onchain.txCount,
+        uniqueCounterpartyCount: uc,
+        maxCounterpartyShare: onchain.maxIncomingSenderShare,
+        liquidityPoolInteractions: cpPatterns.liquidityPoolInteractions,
+        swapLikeRatio: cpPatterns.swapLikeRatio,
+      },
+      cpPatterns
+    );
+    return {
+      resolution,
+      txCount: onchain.txCount,
+      uniqueCounterpartyCount: uc,
+      maxIncomingSenderShare: onchain.maxIncomingSenderShare,
     };
   }
 
@@ -596,8 +647,16 @@ export class AddressCheckService {
       cp: string;
       incomingVolume: number;
       result: AddressAnalysisResult;
-      entity: ReturnType<typeof resolveCounterpartyEntity>;
+      entity: string;
       rw: number;
+      whyEntityResolved: string;
+      exchangeLikeFallback: boolean;
+      onchainSnapshot: {
+        txCount: number;
+        uniqueCounterpartyCount: number;
+        maxCounterpartyShare: number;
+        volumeShare: number;
+      };
     };
 
     const hop1Rows: Hop1Row[] = [];
@@ -624,12 +683,13 @@ export class AddressCheckService {
           TransactionAnalyzer.lastActivityDaysFromTransactions(txs);
         const decay = Math.exp(-TAINT_TIME_DECAY_LAMBDA * lastDays);
         const volShare = incomingVolume / totalVolume;
-        const entity = resolveCounterpartyEntity(
+        const packed = this.resolveCounterpartyEntityFromTxs(
           cp,
           sec,
-          volShare,
-          result.metadata.transactionCount
+          txs,
+          volShare
         );
+        const entity = packed.resolution.entity;
         const rw = getEntityRiskWeight(entity);
         const contrib = volShare * rw * taintHopWeight(1) * decay;
         const hint = `${(volShare * 100).toFixed(1)}% from ${entity} (hop 1, weight ${rw.toFixed(2)})`;
@@ -643,6 +703,13 @@ export class AddressCheckService {
           contrib,
           hadCache,
           hint,
+          whyEntityResolved: packed.resolution.why,
+          onchainSnapshot: {
+            txCount: packed.txCount,
+            uniqueCounterpartyCount: packed.uniqueCounterpartyCount,
+            maxCounterpartyShare: packed.maxIncomingSenderShare,
+            volumeShare: volShare,
+          },
         };
       }
     );
@@ -677,12 +744,25 @@ export class AddressCheckService {
       if (!row) continue;
       flagsFromOtherHops.push(...row.result.flags);
       hopEntityFlags.push(row.result.flags);
+      const exchangeLike = isExchangeLikeCounterparty({
+        flags: row.result.flags,
+        blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+        isMetadataBlacklisted: !!row.result.metadata.isBlacklisted,
+        txCount: row.onchainSnapshot.txCount,
+        uniqueCounterpartyCount: row.onchainSnapshot.uniqueCounterpartyCount,
+        maxIncomingSenderShare: row.onchainSnapshot.maxCounterpartyShare,
+        rootIncomingShare: row.onchainSnapshot.volumeShare,
+        entity: row.entity,
+      });
       hop1Rows.push({
         cp: row.cp,
         incomingVolume: row.incomingVolume,
         result: row.result,
         entity: row.entity,
         rw: row.rw,
+        whyEntityResolved: row.whyEntityResolved,
+        exchangeLikeFallback: exchangeLike,
+        onchainSnapshot: row.onchainSnapshot,
       });
       const isRisky = isAmlRiskyCounterparty({
         address: row.cp,
@@ -692,6 +772,26 @@ export class AddressCheckService {
         isMetadataBlacklisted: !!row.result.metadata?.isBlacklisted,
         blacklistCategory: row.result.metadata?.blacklistCategory ?? null,
       });
+      const bucket = classifySourceBucket({
+        address: row.cp,
+        entity: row.entity,
+        flags: row.result.flags,
+        blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+        exchangeLikeFallback: exchangeLike,
+      });
+      const sofDebug: TopCounterpartySoFDebug = {
+        volumeShare:
+          Math.round(row.onchainSnapshot.volumeShare * 10000) / 10000,
+        txCount: row.onchainSnapshot.txCount,
+        uniqueCounterpartyCount: row.onchainSnapshot.uniqueCounterpartyCount,
+        maxCounterpartyShare:
+          Math.round(row.onchainSnapshot.maxCounterpartyShare * 10000) / 10000,
+        whitelistMatched: isStrongWhitelistedExchange(row.cp),
+        blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+        bucket,
+        whyEntityResolved: row.whyEntityResolved,
+        exchangeLikeFallback: exchangeLike,
+      };
       topRiskyCounterparties.push({
         address: row.cp,
         incomingVolume: Math.round(row.incomingVolume * 100) / 100,
@@ -699,18 +799,18 @@ export class AddressCheckService {
         risky: isRisky,
         entityType: row.entity,
         hopLevel: 1,
+        sofDebug,
       });
     }
 
-    const taintBreakdownRows: VolumeWeightedSourceRow[] = hop1Rows.map(
-      row => ({
-        counterpartyAddress: row.cp,
-        volumeShare: row.incomingVolume / totalVolume,
-        entity: row.entity,
-        flags: row.result.flags,
-        blacklistCategory: row.result.metadata.blacklistCategory ?? null,
-      })
-    );
+    const taintBreakdownRows: VolumeWeightedSourceRow[] = hop1Rows.map(row => ({
+      counterpartyAddress: row.cp,
+      volumeShare: row.incomingVolume / totalVolume,
+      entity: row.entity,
+      flags: row.result.flags,
+      blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+      exchangeLikeFallback: row.exchangeLikeFallback,
+    }));
 
     if (taintBreakdownRows.length > 0) {
       const flow = computeVolumeWeightedSourceBreakdown(taintBreakdownRows);
@@ -749,12 +849,13 @@ export class AddressCheckService {
           -TAINT_TIME_DECAY_LAMBDA *
             TransactionAnalyzer.lastActivityDaysFromTransactions(txsT)
         );
-        const entityT = resolveCounterpartyEntity(
+        const packedT = this.resolveCounterpartyEntityFromTxs(
           tAddr,
           secT,
-          beta,
-          txsT.length
+          txsT,
+          pathShare
         );
+        const entityT = packedT.resolution.entity;
         const rwT = getEntityRiskWeight(entityT);
         cumulativeTaintRaw += pathShare * rwT * taintHopWeight(2) * decayT;
         taintHints.push(
@@ -806,12 +907,13 @@ export class AddressCheckService {
               -TAINT_TIME_DECAY_LAMBDA *
                 TransactionAnalyzer.lastActivityDaysFromTransactions(txsU)
             );
-            const entityU = resolveCounterpartyEntity(
+            const packedU = this.resolveCounterpartyEntityFromTxs(
               uAddr,
               secU,
-              gamma,
-              txsU.length
+              txsU,
+              pathShare
             );
+            const entityU = packedU.resolution.entity;
             const rwU = getEntityRiskWeight(entityU);
             cumulativeTaintRaw += pathShare * rwU * taintHopWeight(3) * decayU;
             taintHints.push(
@@ -873,6 +975,7 @@ export class AddressCheckService {
                 entity: r.entity,
                 flags: r.flags,
                 blacklistCategory: r.blacklistCategory,
+                exchangeLikeFallback: r.exchangeLikeFallback,
               }),
               volumeSharePercent: Math.round(r.volumeShare * 10000) / 100,
             }))
@@ -887,8 +990,7 @@ export class AddressCheckService {
             exchangeShare: Math.round(exchangeShare01 * 10000) / 100,
             whitelistMatchedCount: whitelistMatchedHop1,
             trustedSuppressionApplied:
-              trustCal.trustLayerApplied ||
-              aml.behavioralTrustMultiplier < 1,
+              trustCal.trustLayerApplied || aml.behavioralTrustMultiplier < 1,
             trustedSuppressionFactor: trustCal.trustLayerFactor,
             behavioralTrustMultiplier: aml.behavioralTrustMultiplier,
             dangerousUplift: trustCal.dangerousUplift,
@@ -897,10 +999,7 @@ export class AddressCheckService {
           }
         : undefined;
 
-    const explanation = [
-      ...aml.explanation,
-      ...trustCal.explanationLines,
-    ];
+    const explanation = [...aml.explanation, ...trustCal.explanationLines];
     const explanationDedup = [...new Set(explanation)].slice(0, 14);
 
     return {
