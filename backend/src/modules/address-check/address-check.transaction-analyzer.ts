@@ -40,6 +40,45 @@ export interface Transaction {
 export class TransactionAnalyzer {
   constructor(private blockchainClient: IBlockchainClient) {}
 
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private isRetriableProviderError(err: unknown): boolean {
+    // TronScan client throws TronScanError with statusCode; also allow generic transient failures.
+    const anyErr = err as any;
+    const status = Number(anyErr?.statusCode);
+    if ([0, 429, 500, 502, 503, 504].includes(status)) return true;
+    const msg = String(anyErr?.message ?? '');
+    return (
+      msg.includes('No response received') ||
+      msg.includes('ECONNRESET') ||
+      msg.includes('ETIMEDOUT') ||
+      msg.includes('socket hang up')
+    );
+  }
+
+  private async withRetries<T>(
+    fn: () => Promise<T>,
+    opts: { maxRetries: number; baseDelayMs: number }
+  ): Promise<{ value?: T; error?: unknown; attempts: number }> {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
+      try {
+        const value = await fn();
+        return { value, attempts: attempt + 1 };
+      } catch (e) {
+        lastErr = e;
+        if (!this.isRetriableProviderError(e) || attempt === opts.maxRetries) {
+          break;
+        }
+        const delay = opts.baseDelayMs * Math.pow(2, attempt);
+        await this.sleep(delay);
+      }
+    }
+    return { error: lastErr, attempts: opts.maxRetries + 1 };
+  }
+
   /** USDT/USDC mainnet contracts for SoF (env override + defaults). */
   private stablecoinContractAddresses(): string[] {
     return [
@@ -52,10 +91,12 @@ export class TransactionAnalyzer {
   }
 
   /** True if this TRC20 row is USDT/USDC by symbol or by mainnet contract address. */
-  private isTaintStablecoinToken(tokenInfo?: {
-    symbol?: string;
-    address?: string;
-  } | null): boolean {
+  private isTaintStablecoinToken(
+    tokenInfo?: {
+      symbol?: string;
+      address?: string;
+    } | null
+  ): boolean {
     if (!tokenInfo) return false;
     const contract = tokenInfo.address?.trim();
     if (contract && TAINT_STABLECOIN_CONTRACT_ADDRESSES.has(contract)) {
@@ -161,18 +202,28 @@ export class TransactionAnalyzer {
     scannedTxCount: number;
     stablecoinTxCount: number;
     truncated: boolean;
+    provider?: 'tronscan_transfers' | 'legacy_tx_list';
+    warning?: string;
   }> {
     try {
       const contracts = this.stablecoinContractAddresses();
-      const { transfers, meta } =
-        await this.blockchainClient.getStablecoinTrc20Transfers(address, {
-          direction: 'incoming',
-          contractAddresses: contracts,
-          maxPages: 5,
-          pageSize: 200,
-          confirm: true,
-          debug: opts?.debug,
-        });
+      const attempt = await this.withRetries(
+        () =>
+          this.blockchainClient.getStablecoinTrc20Transfers(address, {
+            direction: 'incoming',
+            contractAddresses: contracts,
+            maxPages: 5,
+            pageSize: 200,
+            confirm: true,
+            debug: opts?.debug,
+          }),
+        { maxRetries: 2, baseDelayMs: 400 }
+      );
+
+      if (!attempt.value) {
+        throw attempt.error;
+      }
+      const { transfers, meta } = attempt.value;
 
       const normalizedAddress = address.toLowerCase();
       const volumeByCounterparty = new Map<string, number>();
@@ -194,6 +245,7 @@ export class TransactionAnalyzer {
         console.log(`[TransactionAnalyzer] Stablecoin incoming scan summary`, {
           address,
           source: 'token_trc20_transfers',
+          attempts: attempt.attempts,
           pagesFetched: meta.pagesFetched,
           totalRowsFetched: meta.totalRowsFetched,
           matchedIncomingTransfers: meta.matchedTransfers,
@@ -213,13 +265,20 @@ export class TransactionAnalyzer {
         scannedTxCount: meta.totalRowsFetched,
         stablecoinTxCount,
         truncated: meta.truncated,
+        provider: 'tronscan_transfers',
       };
     } catch (e) {
       console.warn(
         '[TransactionAnalyzer] Stablecoin transfer fetch failed; falling back to tx list:',
         e
       );
-      return this.fetchTRC20IncomingVolumesLegacy(address, opts);
+      const legacy = await this.fetchTRC20IncomingVolumesLegacy(address, opts);
+      return {
+        ...legacy,
+        provider: 'legacy_tx_list',
+        warning:
+          'Stablecoin transfers API temporarily failed; SoF/taint may be incomplete (fallback to generic tx list).',
+      };
     }
   }
 
@@ -316,20 +375,23 @@ export class TransactionAnalyzer {
       // return zeros
     }
     if (opts?.debug) {
-      console.log(`[TransactionAnalyzer] Stablecoin incoming (legacy tx list)`, {
-        address,
-        pagesFetched,
-        scannedTxCount,
-        stablecoinTxCount,
-        stablecoinIncomingTotal: totalVolume,
-        uniqueCounterparties: volumeByCounterparty.size,
-        tokenSymbolsSeen: Array.from(tokenSymbolsSeen).slice(0, 25),
-        skippedToMismatch,
-        skippedNoTokenInfo,
-        skippedNonStablecoin,
-        skippedNonPositiveAmount,
-        truncated,
-      });
+      console.log(
+        `[TransactionAnalyzer] Stablecoin incoming (legacy tx list)`,
+        {
+          address,
+          pagesFetched,
+          scannedTxCount,
+          stablecoinTxCount,
+          stablecoinIncomingTotal: totalVolume,
+          uniqueCounterparties: volumeByCounterparty.size,
+          tokenSymbolsSeen: Array.from(tokenSymbolsSeen).slice(0, 25),
+          skippedToMismatch,
+          skippedNoTokenInfo,
+          skippedNonStablecoin,
+          skippedNonPositiveAmount,
+          truncated,
+        }
+      );
     }
     return {
       totalVolume,

@@ -37,6 +37,8 @@ export interface BuildMetadataParams {
   totalIncomingVolume?: number;
   hasStablecoinSourceSample?: boolean;
   stablecoinSourceSampleReason?: string;
+  stablecoinSofWarning?: string;
+  stablecoinSofDataSource?: 'tronscan_transfers' | 'legacy_tx_list';
   walletActivityContext?: {
     hasIncomingActivity: boolean;
     incomingTxCount: number;
@@ -106,6 +108,8 @@ export function buildAnalysisMetadata(
     totalIncomingVolume,
     hasStablecoinSourceSample,
     stablecoinSourceSampleReason,
+    stablecoinSofWarning,
+    stablecoinSofDataSource,
     walletActivityContext,
     taintInput,
     riskyIncomingVolume,
@@ -134,10 +138,14 @@ export function buildAnalysisMetadata(
     ...(allTrc20IncomingVolume !== undefined && { allTrc20IncomingVolume }),
     ...(stablecoinIncomingVolume !== undefined && { stablecoinIncomingVolume }),
     ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
-    ...(hasStablecoinSourceSample !== undefined && { hasStablecoinSourceSample }),
+    ...(hasStablecoinSourceSample !== undefined && {
+      hasStablecoinSourceSample,
+    }),
     ...(stablecoinSourceSampleReason !== undefined && {
       stablecoinSourceSampleReason,
     }),
+    ...(stablecoinSofWarning !== undefined && { stablecoinSofWarning }),
+    ...(stablecoinSofDataSource !== undefined && { stablecoinSofDataSource }),
     ...(walletActivityContext !== undefined && { walletActivityContext }),
     ...(taintInput !== undefined && { taintInput }),
     ...(riskyIncomingVolume !== undefined && { riskyIncomingVolume }),

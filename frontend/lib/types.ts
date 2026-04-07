@@ -69,6 +69,8 @@ export interface AddressCheckResponse {
     totalIncomingVolume?: number;
     hasStablecoinSourceSample?: boolean;
     stablecoinSourceSampleReason?: string;
+    stablecoinSofWarning?: string;
+    stablecoinSofDataSource?: 'tronscan_transfers' | 'legacy_tx_list';
     walletActivityContext?: {
       hasIncomingActivity: boolean;
       incomingTxCount: number;

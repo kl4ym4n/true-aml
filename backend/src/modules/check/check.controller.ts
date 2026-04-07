@@ -65,6 +65,12 @@ export const checkAddress = async (
           ...(metadata.stablecoinSourceSampleReason !== undefined && {
             stablecoinSourceSampleReason: metadata.stablecoinSourceSampleReason,
           }),
+          ...(metadata.stablecoinSofWarning !== undefined && {
+            stablecoinSofWarning: metadata.stablecoinSofWarning,
+          }),
+          ...(metadata.stablecoinSofDataSource !== undefined && {
+            stablecoinSofDataSource: metadata.stablecoinSofDataSource,
+          }),
           ...(metadata.walletActivityContext !== undefined && {
             walletActivityContext: metadata.walletActivityContext,
           }),
