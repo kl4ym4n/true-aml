@@ -44,12 +44,12 @@ import {
 import {
   findAddressesCandidateExchangeInfra,
   findAddressesGraphLinkedToStrongWhitelist,
-} from './address-check.utils/graph-sof-trusted';
+} from './address-check.utils';
 import {
   resolveTrustedSourceSemantics,
   securityTagsSuggestExchangeRail,
-} from './address-check.utils/trusted-source-semantics';
-import { computeWalletContextHints } from './address-check.utils/wallet-context-hints';
+} from './address-check.utils';
+import { computeWalletContextHints } from './address-check.utils';
 import { AdvancedRiskCalculator } from './address-check.utils';
 import { LruCache } from './address-check.utils';
 import { mapWithConcurrency } from './address-check.utils';
@@ -410,7 +410,8 @@ export class AddressCheckService {
         walletActivityContext: {
           hasIncomingActivity: transactionCount > 0,
           incomingTxCount: transactionCount,
-          hasStablecoinIncomingActivity: (taintInput?.stablecoinTxCount ?? 0) > 0,
+          hasStablecoinIncomingActivity:
+            (taintInput?.stablecoinTxCount ?? 0) > 0,
         },
         taintInput,
         riskyIncomingVolume,
@@ -801,8 +802,10 @@ export class AddressCheckService {
     const hop1Addresses = hop1Results
       .filter((r): r is NonNullable<(typeof hop1Results)[number]> => r != null)
       .map(r => r.cp);
-    const graphLinkedSet =
-      await findAddressesGraphLinkedToStrongWhitelist(prisma, hop1Addresses);
+    const graphLinkedSet = await findAddressesGraphLinkedToStrongWhitelist(
+      prisma,
+      hop1Addresses
+    );
     const candidateInfraSet = await findAddressesCandidateExchangeInfra(
       prisma,
       hop1Addresses

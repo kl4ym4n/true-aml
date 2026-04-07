@@ -91,10 +91,12 @@ export class TransactionAnalyzer {
   }
 
   /** True if this TRC20 row is USDT/USDC by symbol or by mainnet contract address. */
-  private isTaintStablecoinToken(tokenInfo?: {
-    symbol?: string;
-    address?: string;
-  } | null): boolean {
+  private isTaintStablecoinToken(
+    tokenInfo?: {
+      symbol?: string;
+      address?: string;
+    } | null
+  ): boolean {
     if (!tokenInfo) return false;
     const contract = tokenInfo.address?.trim();
     if (contract && TAINT_STABLECOIN_CONTRACT_ADDRESSES.has(contract)) {
@@ -373,20 +375,23 @@ export class TransactionAnalyzer {
       // return zeros
     }
     if (opts?.debug) {
-      console.log(`[TransactionAnalyzer] Stablecoin incoming (legacy tx list)`, {
-        address,
-        pagesFetched,
-        scannedTxCount,
-        stablecoinTxCount,
-        stablecoinIncomingTotal: totalVolume,
-        uniqueCounterparties: volumeByCounterparty.size,
-        tokenSymbolsSeen: Array.from(tokenSymbolsSeen).slice(0, 25),
-        skippedToMismatch,
-        skippedNoTokenInfo,
-        skippedNonStablecoin,
-        skippedNonPositiveAmount,
-        truncated,
-      });
+      console.log(
+        `[TransactionAnalyzer] Stablecoin incoming (legacy tx list)`,
+        {
+          address,
+          pagesFetched,
+          scannedTxCount,
+          stablecoinTxCount,
+          stablecoinIncomingTotal: totalVolume,
+          uniqueCounterparties: volumeByCounterparty.size,
+          tokenSymbolsSeen: Array.from(tokenSymbolsSeen).slice(0, 25),
+          skippedToMismatch,
+          skippedNoTokenInfo,
+          skippedNonStablecoin,
+          skippedNonPositiveAmount,
+          truncated,
+        }
+      );
     }
     return {
       totalVolume,

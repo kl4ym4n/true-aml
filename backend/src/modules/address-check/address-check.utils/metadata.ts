@@ -138,7 +138,9 @@ export function buildAnalysisMetadata(
     ...(allTrc20IncomingVolume !== undefined && { allTrc20IncomingVolume }),
     ...(stablecoinIncomingVolume !== undefined && { stablecoinIncomingVolume }),
     ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
-    ...(hasStablecoinSourceSample !== undefined && { hasStablecoinSourceSample }),
+    ...(hasStablecoinSourceSample !== undefined && {
+      hasStablecoinSourceSample,
+    }),
     ...(stablecoinSourceSampleReason !== undefined && {
       stablecoinSourceSampleReason,
     }),
