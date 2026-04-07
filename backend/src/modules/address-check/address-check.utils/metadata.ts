@@ -2,7 +2,9 @@ import type {
   AddressAnalysisMetadata,
   SourceBreakdown,
   SourceFlowCalibration,
+  SourceOfFundsSampleDebug,
   TopCounterpartySoFDebug,
+  WalletContextHints,
 } from '../address-check.types';
 import type { WhitelistLevel } from './whitelist';
 
@@ -30,7 +32,16 @@ export interface BuildMetadataParams {
   };
   sourceBreakdown?: SourceBreakdown;
   allTrc20IncomingVolume?: number;
+  stablecoinIncomingVolume?: number;
+  /** Backwards-compat alias for stablecoin incoming volume. */
   totalIncomingVolume?: number;
+  hasStablecoinSourceSample?: boolean;
+  stablecoinSourceSampleReason?: string;
+  walletActivityContext?: {
+    hasIncomingActivity: boolean;
+    incomingTxCount: number;
+    hasStablecoinIncomingActivity: boolean;
+  };
   taintInput?: {
     symbols: string[];
     pagesFetched: number;
@@ -70,6 +81,8 @@ export interface BuildMetadataParams {
     postWhitelistScore: number;
   };
   sourceFlowCalibration?: SourceFlowCalibration;
+  sourceOfFundsSampleDebug?: SourceOfFundsSampleDebug;
+  walletContext?: WalletContextHints;
 }
 
 /** Build AddressAnalysisMetadata from analysis results. */
@@ -89,7 +102,11 @@ export function buildAnalysisMetadata(
     addressSecurity,
     sourceBreakdown,
     allTrc20IncomingVolume,
+    stablecoinIncomingVolume,
     totalIncomingVolume,
+    hasStablecoinSourceSample,
+    stablecoinSourceSampleReason,
+    walletActivityContext,
     taintInput,
     riskyIncomingVolume,
     taintPercent,
@@ -98,6 +115,8 @@ export function buildAnalysisMetadata(
     scoreBreakdown,
     explanation,
     sourceFlowCalibration,
+    sourceOfFundsSampleDebug,
+    walletContext,
   } = params;
 
   return {
@@ -113,7 +132,13 @@ export function buildAnalysisMetadata(
     addressSecurity,
     ...(sourceBreakdown && { sourceBreakdown }),
     ...(allTrc20IncomingVolume !== undefined && { allTrc20IncomingVolume }),
+    ...(stablecoinIncomingVolume !== undefined && { stablecoinIncomingVolume }),
     ...(totalIncomingVolume !== undefined && { totalIncomingVolume }),
+    ...(hasStablecoinSourceSample !== undefined && { hasStablecoinSourceSample }),
+    ...(stablecoinSourceSampleReason !== undefined && {
+      stablecoinSourceSampleReason,
+    }),
+    ...(walletActivityContext !== undefined && { walletActivityContext }),
     ...(taintInput !== undefined && { taintInput }),
     ...(riskyIncomingVolume !== undefined && { riskyIncomingVolume }),
     ...(taintPercent !== undefined && { taintPercent }),
@@ -122,5 +147,9 @@ export function buildAnalysisMetadata(
     ...(scoreBreakdown !== undefined && { scoreBreakdown }),
     ...(explanation !== undefined && explanation.length > 0 && { explanation }),
     ...(sourceFlowCalibration !== undefined && { sourceFlowCalibration }),
+    ...(sourceOfFundsSampleDebug !== undefined && {
+      sourceOfFundsSampleDebug,
+    }),
+    ...(walletContext !== undefined && { walletContext }),
   };
 }

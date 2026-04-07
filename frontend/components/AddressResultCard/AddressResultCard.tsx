@@ -18,10 +18,12 @@ function isPositiveNumber(n: number | undefined): boolean {
 
 export default function AddressResultCard({ result }: AddressResultCardProps) {
   const { metadata } = result;
+  const stablecoinIncoming =
+    metadata.stablecoinIncomingVolume ?? metadata.totalIncomingVolume;
 
   const hasTaintData =
     isPositiveNumber(metadata.taintPercent) ||
-    isPositiveNumber(metadata.totalIncomingVolume) ||
+    isPositiveNumber(stablecoinIncoming) ||
     isPositiveNumber(metadata.riskyIncomingVolume);
 
   const taintStats = metadata.taintCalculationStats;
@@ -93,10 +95,10 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
                   <strong>{metadata.taintPercent!.toFixed(2)}%</strong>
                 </div>
               )}
-              {isPositiveNumber(metadata.totalIncomingVolume) && (
+              {isPositiveNumber(stablecoinIncoming) && (
                 <div className={styles.kvRow}>
                   <span>Stablecoin Incoming (USDT/USDC)</span>
-                  <strong>{metadata.totalIncomingVolume!.toFixed(2)}</strong>
+                  <strong>{stablecoinIncoming!.toFixed(2)}</strong>
                 </div>
               )}
               {isPositiveNumber(metadata.riskyIncomingVolume) && (
@@ -246,7 +248,10 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
         )}
 
         {metadata.sourceBreakdown && (
-          <SourceBreakdown sourceBreakdown={metadata.sourceBreakdown} />
+          <SourceBreakdown
+            sourceBreakdown={metadata.sourceBreakdown}
+            walletContext={metadata.walletContext}
+          />
         )}
       </div>
     </ResultCard>

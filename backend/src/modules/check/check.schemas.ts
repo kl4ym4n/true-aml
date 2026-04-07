@@ -23,6 +23,8 @@ const txHashSchema = z
  */
 export const addressCheckRequestSchema = z.object({
   address: tronAddressSchema,
+  /** When true, logs full SoF sample rows to server console (JSON). */
+  debugSof: z.boolean().optional(),
 });
 
 /**

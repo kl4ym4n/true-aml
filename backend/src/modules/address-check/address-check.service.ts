@@ -7,6 +7,7 @@ import type {
   AddressAnalysisResult,
   RiskFlag,
   TopCounterpartySoFDebug,
+  SourceOfFundsSampleDebug,
 } from './address-check.types';
 import {
   MIN_TAINT_COUNTERPARTY_VOLUME,
@@ -40,6 +41,15 @@ import {
   isExchangeLikeCounterparty,
   isAmlRiskyCounterparty,
 } from './address-check.utils';
+import {
+  findAddressesCandidateExchangeInfra,
+  findAddressesGraphLinkedToStrongWhitelist,
+} from './address-check.utils/graph-sof-trusted';
+import {
+  resolveTrustedSourceSemantics,
+  securityTagsSuggestExchangeRail,
+} from './address-check.utils/trusted-source-semantics';
+import { computeWalletContextHints } from './address-check.utils/wallet-context-hints';
 import { AdvancedRiskCalculator } from './address-check.utils';
 import { LruCache } from './address-check.utils';
 import { mapWithConcurrency } from './address-check.utils';
@@ -157,7 +167,10 @@ export class AddressCheckService {
     }
   }
 
-  async analyzeAddress(address: string): Promise<AddressAnalysisResult> {
+  async analyzeAddress(
+    address: string,
+    opts?: { debugSof?: boolean }
+  ): Promise<AddressAnalysisResult> {
     console.log(`[AddressCheck] Starting analysis for address: ${address}`);
     const startTime = Date.now();
 
@@ -192,7 +205,8 @@ export class AddressCheckService {
       address,
       0,
       new Set<string>(),
-      { addressSecurity, blacklistEntry }
+      { addressSecurity, blacklistEntry },
+      opts
     );
     console.log(`[AddressCheck] Analysis completed:`, {
       address,
@@ -206,7 +220,8 @@ export class AddressCheckService {
     address: string,
     hopLevel: number,
     visitedAddresses: Set<string>,
-    cachedData?: CachedSecurityData
+    cachedData?: CachedSecurityData,
+    opts?: { debugSof?: boolean }
   ): Promise<AddressAnalysisResult> {
     console.log(
       `[AddressCheck] Analyzing address at hop level ${hopLevel}: ${address}`
@@ -272,7 +287,7 @@ export class AddressCheckService {
       finalRiskScore,
       flagsFromOtherHops,
       hopEntityFlags,
-      totalIncomingVolume,
+      stablecoinIncomingVolume,
       taintInput,
       riskyIncomingVolume,
       taintPercent,
@@ -284,6 +299,7 @@ export class AddressCheckService {
       explanation,
       taintBreakdownRows,
       sourceFlowCalibration,
+      sourceOfFundsSampleDebug,
     } = await this.runMultiHopIfNeeded(
       address,
       hopLevel,
@@ -291,7 +307,8 @@ export class AddressCheckService {
       transactions,
       visitedAddresses,
       flags,
-      patterns
+      patterns,
+      opts
     );
 
     let cappedScore = Math.round(Math.min(finalRiskScore, 100) * 100) / 100;
@@ -309,12 +326,34 @@ export class AddressCheckService {
       patterns,
       transactionCount
     );
+    const hasStablecoinSourceSample =
+      hopLevel === 0 &&
+      (taintInput?.stablecoinTxCount ?? 0) > 0 &&
+      stablecoinIncomingVolume > 0;
+
     const sourceBreakdown =
       hopLevel === 0 && taintBreakdownRows && taintBreakdownRows.length > 0
         ? computeVolumeWeightedSourceBreakdown(taintBreakdownRows)
-        : hopLevel === 0
-          ? computeSourceBreakdown(hopEntityFlags)
-          : undefined;
+        : hopLevel === 0 && !hasStablecoinSourceSample
+          ? {
+              summary: { trusted: 0, suspicious: 0, dangerous: 0 },
+              trusted: {},
+              suspicious: {},
+              dangerous: {},
+              sampleEmpty: true,
+              note: 'No incoming USDT/USDC transfers in analyzed source-of-funds sample.',
+            }
+          : hopLevel === 0
+            ? computeSourceBreakdown(hopEntityFlags)
+            : undefined;
+
+    const walletContext =
+      hopLevel === 0
+        ? computeWalletContextHints({
+            patterns,
+            sourceBreakdown: sourceBreakdown ?? null,
+          })
+        : undefined;
 
     const finalFlags =
       flagsFromOtherHops.length > 0
@@ -357,7 +396,18 @@ export class AddressCheckService {
       sourceBreakdown,
       ...(hopLevel === 0 && {
         allTrc20IncomingVolume: patterns.totalIncoming,
-        totalIncomingVolume,
+        stablecoinIncomingVolume,
+        // Backwards-compat alias (will be removed once frontend is migrated).
+        totalIncomingVolume: stablecoinIncomingVolume,
+        hasStablecoinSourceSample,
+        stablecoinSourceSampleReason: hasStablecoinSourceSample
+          ? undefined
+          : 'No incoming USDT/USDC transfers in analyzed source-of-funds sample',
+        walletActivityContext: {
+          hasIncomingActivity: transactionCount > 0,
+          incomingTxCount: transactionCount,
+          hasStablecoinIncomingActivity: (taintInput?.stablecoinTxCount ?? 0) > 0,
+        },
         taintInput,
         riskyIncomingVolume,
         taintPercent,
@@ -380,6 +430,10 @@ export class AddressCheckService {
           postWhitelistScore: cappedScore,
         },
         ...(sourceFlowCalibration !== undefined && { sourceFlowCalibration }),
+        ...(sourceOfFundsSampleDebug !== undefined && {
+          sourceOfFundsSampleDebug,
+        }),
+        ...(walletContext !== undefined && { walletContext }),
       }),
     });
 
@@ -479,12 +533,13 @@ export class AddressCheckService {
     _transactions: Transaction[],
     visitedAddresses: Set<string>,
     flags: RiskFlag[],
-    patterns: TransactionPatterns
+    patterns: TransactionPatterns,
+    sofOpts?: { debugSof?: boolean }
   ): Promise<{
     finalRiskScore: number;
     flagsFromOtherHops: RiskFlag[];
     hopEntityFlags: RiskFlag[][];
-    totalIncomingVolume: number;
+    stablecoinIncomingVolume: number;
     riskyIncomingVolume: number;
     taintPercent: number;
     topRiskyCounterparties: TaintCounterpartyInsight[];
@@ -502,6 +557,7 @@ export class AddressCheckService {
     explanation: string[];
     taintBreakdownRows?: VolumeWeightedSourceRow[];
     sourceFlowCalibration?: SourceFlowCalibration;
+    sourceOfFundsSampleDebug?: SourceOfFundsSampleDebug;
   }> {
     const emptyTaintInput = {
       symbols: ['USDT', 'USDC'] as string[],
@@ -514,7 +570,7 @@ export class AddressCheckService {
     let finalRiskScore = baseRiskScore;
     const flagsFromOtherHops: RiskFlag[] = [];
     const hopEntityFlags: RiskFlag[][] = [flags];
-    let totalIncomingVolume = 0;
+    let stablecoinIncomingVolume = 0;
     let riskyIncomingVolume = 0;
     let taintPercent = 0;
     const topRiskyCounterparties: TaintCounterpartyInsight[] = [];
@@ -538,13 +594,14 @@ export class AddressCheckService {
     let dangerousShare01 = 0;
     let exchangeShare01 = 0;
     let whitelistMatchedHop1 = 0;
+    let sourceOfFundsSampleDebug: SourceOfFundsSampleDebug | undefined;
 
     if (hopLevel !== 0) {
       return {
         finalRiskScore,
         flagsFromOtherHops,
         hopEntityFlags,
-        totalIncomingVolume,
+        stablecoinIncomingVolume,
         riskyIncomingVolume,
         taintPercent,
         topRiskyCounterparties,
@@ -556,6 +613,7 @@ export class AddressCheckService {
         explanation: [],
         taintBreakdownRows: undefined,
         sourceFlowCalibration: undefined,
+        sourceOfFundsSampleDebug: undefined,
       };
     }
 
@@ -569,8 +627,10 @@ export class AddressCheckService {
       scannedTxCount,
       stablecoinTxCount,
       truncated,
-    } = await this.transactionAnalyzer.fetchTRC20IncomingVolumes(address);
-    totalIncomingVolume = totalVolume;
+    } = await this.transactionAnalyzer.fetchTRC20IncomingVolumes(address, {
+      debug: !!sofOpts?.debugSof,
+    });
+    stablecoinIncomingVolume = totalVolume;
     taintInput = {
       symbols: ['USDT', 'USDC'],
       pagesFetched,
@@ -591,7 +651,7 @@ export class AddressCheckService {
 
     if (totalVolume <= 0 || volumeByCounterparty.size === 0) {
       behavioralScore = computeBehavioralPatternScore(patterns);
-      volumeScore = getVolumeScore(totalIncomingVolume);
+      volumeScore = getVolumeScore(stablecoinIncomingVolume);
       const aml = this.advancedRiskCalculator.calculate({
         baseRisk: baseRiskScore,
         taintScore: 0,
@@ -605,7 +665,7 @@ export class AddressCheckService {
         finalRiskScore,
         flagsFromOtherHops,
         hopEntityFlags,
-        totalIncomingVolume,
+        stablecoinIncomingVolume,
         riskyIncomingVolume,
         taintPercent: 0,
         topRiskyCounterparties,
@@ -617,6 +677,7 @@ export class AddressCheckService {
         explanation: aml.explanation,
         taintBreakdownRows: undefined,
         sourceFlowCalibration: undefined,
+        sourceOfFundsSampleDebug: undefined,
       };
     }
 
@@ -651,6 +712,7 @@ export class AddressCheckService {
       rw: number;
       whyEntityResolved: string;
       exchangeLikeFallback: boolean;
+      securityTags: string[];
       onchainSnapshot: {
         txCount: number;
         uniqueCounterpartyCount: number;
@@ -710,8 +772,19 @@ export class AddressCheckService {
             maxCounterpartyShare: packed.maxIncomingSenderShare,
             volumeShare: volShare,
           },
+          securityTags: sec?.tags ?? [],
         };
       }
+    );
+
+    const hop1Addresses = hop1Results
+      .filter((r): r is NonNullable<(typeof hop1Results)[number]> => r != null)
+      .map(r => r.cp);
+    const graphLinkedSet =
+      await findAddressesGraphLinkedToStrongWhitelist(prisma, hop1Addresses);
+    const candidateInfraSet = await findAddressesCandidateExchangeInfra(
+      prisma,
+      hop1Addresses
     );
 
     let hop1Hits = 0;
@@ -762,6 +835,7 @@ export class AddressCheckService {
         rw: row.rw,
         whyEntityResolved: row.whyEntityResolved,
         exchangeLikeFallback: exchangeLike,
+        securityTags: row.securityTags,
         onchainSnapshot: row.onchainSnapshot,
       });
       const isRisky = isAmlRiskyCounterparty({
@@ -778,19 +852,39 @@ export class AddressCheckService {
         flags: row.result.flags,
         blacklistCategory: row.result.metadata.blacklistCategory ?? null,
         exchangeLikeFallback: exchangeLike,
+        graphLinkedToWhitelistedExchange: graphLinkedSet.has(row.cp),
+        candidateSignalExchangeInfra: candidateInfraSet.has(row.cp),
+        securityTags: row.securityTags,
       });
+      const sem = resolveTrustedSourceSemantics({
+        address: row.cp,
+        entity: row.entity,
+        flags: row.result.flags,
+        blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+        exchangeLikeFallback: exchangeLike,
+        graphLinkedToWhitelistedExchange: graphLinkedSet.has(row.cp),
+        candidateSignalExchangeInfra: candidateInfraSet.has(row.cp),
+        securityTags: row.securityTags,
+      });
+      const tagsSuggest = securityTagsSuggestExchangeRail(row.securityTags);
       const sofDebug: TopCounterpartySoFDebug = {
         volumeShare:
           Math.round(row.onchainSnapshot.volumeShare * 10000) / 10000,
+        volume: Math.round(row.incomingVolume * 100) / 100,
         txCount: row.onchainSnapshot.txCount,
         uniqueCounterpartyCount: row.onchainSnapshot.uniqueCounterpartyCount,
         maxCounterpartyShare:
           Math.round(row.onchainSnapshot.maxCounterpartyShare * 10000) / 10000,
         whitelistMatched: isStrongWhitelistedExchange(row.cp),
         blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+        securityTags: row.securityTags,
         bucket,
         whyEntityResolved: row.whyEntityResolved,
         exchangeLikeFallback: exchangeLike,
+        graphLinkedToWhitelistedExchange: graphLinkedSet.has(row.cp),
+        candidateSignalExchangeInfra: candidateInfraSet.has(row.cp),
+        securityTagsSuggestExchange: tagsSuggest,
+        trustedReason: sem.isTrusted ? sem.trustedReason : null,
       };
       topRiskyCounterparties.push({
         address: row.cp,
@@ -810,7 +904,96 @@ export class AddressCheckService {
       flags: row.result.flags,
       blacklistCategory: row.result.metadata.blacklistCategory ?? null,
       exchangeLikeFallback: row.exchangeLikeFallback,
+      graphLinkedToWhitelistedExchange: graphLinkedSet.has(row.cp),
+      candidateSignalExchangeInfra: candidateInfraSet.has(row.cp),
+      securityTags: row.securityTags,
     }));
+
+    if (hop1Rows.length > 0 && totalVolume > 0) {
+      let sumTrustedVolume = 0;
+      let sumSuspiciousVolume = 0;
+      let sumDangerousVolume = 0;
+      let numberOfTrustedRows = 0;
+      let numberOfExchangeOrWhitelistRows = 0;
+      let numberOfWhitelistMatches = 0;
+      let numberOfGraphTrustedLinks = 0;
+      let numberOfCandidateInfraMatches = 0;
+
+      for (const row of hop1Rows) {
+        const b = classifySourceBucket({
+          address: row.cp,
+          entity: row.entity,
+          flags: row.result.flags,
+          blacklistCategory: row.result.metadata.blacklistCategory ?? null,
+          exchangeLikeFallback: row.exchangeLikeFallback,
+          graphLinkedToWhitelistedExchange: graphLinkedSet.has(row.cp),
+          candidateSignalExchangeInfra: candidateInfraSet.has(row.cp),
+          securityTags: row.securityTags,
+        });
+        const v = row.incomingVolume;
+        if (b === 'trusted') {
+          sumTrustedVolume += v;
+          numberOfTrustedRows++;
+        } else if (b === 'suspicious') {
+          sumSuspiciousVolume += v;
+        } else {
+          sumDangerousVolume += v;
+        }
+        if (isStrongWhitelistedExchange(row.cp)) {
+          numberOfWhitelistMatches++;
+        }
+        if (graphLinkedSet.has(row.cp)) {
+          numberOfGraphTrustedLinks++;
+        }
+        if (candidateInfraSet.has(row.cp)) {
+          numberOfCandidateInfraMatches++;
+        }
+        if (
+          row.entity === 'exchange' ||
+          row.entity === 'payment_processor' ||
+          isStrongWhitelistedExchange(row.cp) ||
+          row.result.metadata.blacklistCategory === 'EXCHANGE' ||
+          graphLinkedSet.has(row.cp) ||
+          candidateInfraSet.has(row.cp)
+        ) {
+          numberOfExchangeOrWhitelistRows++;
+        }
+      }
+
+      const counterparties = topRiskyCounterparties
+        .map(c => c.sofDebug)
+        .filter((d): d is TopCounterpartySoFDebug => d != null);
+
+      sourceOfFundsSampleDebug = {
+        aggregation: {
+          sumTrustedVolume: Math.round(sumTrustedVolume * 100) / 100,
+          sumSuspiciousVolume: Math.round(sumSuspiciousVolume * 100) / 100,
+          sumDangerousVolume: Math.round(sumDangerousVolume * 100) / 100,
+          numberOfTrustedRows,
+          numberOfExchangeOrWhitelistRows,
+          numberOfWhitelistMatches,
+          numberOfGraphTrustedLinks,
+          numberOfCandidateInfraMatches,
+        },
+        counterparties,
+      };
+
+      if (sofOpts?.debugSof) {
+        console.log(
+          '[SoF sample debug]',
+          JSON.stringify(
+            {
+              rootAddress: address,
+              topCounterparties: hop1Addresses.slice(0, 15),
+              aggregation: sourceOfFundsSampleDebug.aggregation,
+              rows: counterparties.slice(0, 15),
+            },
+            null,
+            2
+          )
+        );
+      }
+    }
 
     if (taintBreakdownRows.length > 0) {
       const flow = computeVolumeWeightedSourceBreakdown(taintBreakdownRows);
@@ -943,7 +1126,7 @@ export class AddressCheckService {
     }
 
     behavioralScore = computeBehavioralPatternScore(patterns);
-    volumeScore = getVolumeScore(totalIncomingVolume);
+    volumeScore = getVolumeScore(stablecoinIncomingVolume);
 
     const aml = this.advancedRiskCalculator.calculate({
       baseRisk: baseRiskScore,
@@ -976,6 +1159,10 @@ export class AddressCheckService {
                 flags: r.flags,
                 blacklistCategory: r.blacklistCategory,
                 exchangeLikeFallback: r.exchangeLikeFallback,
+                graphLinkedToWhitelistedExchange:
+                  r.graphLinkedToWhitelistedExchange,
+                candidateSignalExchangeInfra: r.candidateSignalExchangeInfra,
+                securityTags: r.securityTags,
               }),
               volumeSharePercent: Math.round(r.volumeShare * 10000) / 100,
             }))
@@ -1006,7 +1193,7 @@ export class AddressCheckService {
       finalRiskScore,
       flagsFromOtherHops,
       hopEntityFlags,
-      totalIncomingVolume,
+      stablecoinIncomingVolume,
       riskyIncomingVolume,
       taintPercent,
       topRiskyCounterparties,
@@ -1019,6 +1206,7 @@ export class AddressCheckService {
       taintBreakdownRows:
         taintBreakdownRows.length > 0 ? taintBreakdownRows : undefined,
       sourceFlowCalibration,
+      sourceOfFundsSampleDebug,
     };
   }
 }

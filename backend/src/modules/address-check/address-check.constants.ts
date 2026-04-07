@@ -50,6 +50,17 @@ export const MIN_TAINT_VOLUME_SHARE_PERCENT = 0.1;
 // Taint model uses stablecoins only to avoid mixed-token distortion.
 export const TAINT_STABLECOIN_SYMBOLS = new Set<string>(['USDT', 'USDC']);
 
+/**
+ * Mainnet TRC20 contract addresses (base58). Prefer matching by contract when
+ * `tokenInfo.symbol` is missing or inconsistent (common with some providers).
+ * @see https://tronscan.org/#/token20/TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t (USDT)
+ * @see https://tronscan.org/#/token20/TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8 (USDC)
+ */
+export const TAINT_STABLECOIN_CONTRACT_ADDRESSES = new Set<string>([
+  'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t', // USDT
+  'TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8', // USDC
+]);
+
 // Known TRON DeFi liquidity pool addresses (smart contracts)
 // These are addresses of DEX routers and liquidity pools that are commonly used
 // Note: This list should be maintained and updated regularly

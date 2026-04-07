@@ -12,6 +12,9 @@ export interface VolumeWeightedSourceRow {
   blacklistCategory?: string | null;
   /** SoF-only: trusted via diffuse inflow heuristics (not direct entity label). */
   exchangeLikeFallback?: boolean;
+  graphLinkedToWhitelistedExchange?: boolean;
+  candidateSignalExchangeInfra?: boolean;
+  securityTags?: string[] | null;
 }
 
 function labelForRow(
@@ -109,6 +112,9 @@ export function computeExchangeTrustedShare01(
       flags: r.flags,
       blacklistCategory: r.blacklistCategory,
       exchangeLikeFallback: r.exchangeLikeFallback,
+      graphLinkedToWhitelistedExchange: r.graphLinkedToWhitelistedExchange,
+      candidateSignalExchangeInfra: r.candidateSignalExchangeInfra,
+      securityTags: r.securityTags,
     });
     if (bucket !== 'trusted') continue;
     if (
@@ -149,6 +155,9 @@ export function computeVolumeWeightedSourceBreakdown(
       flags: row.flags,
       blacklistCategory: row.blacklistCategory,
       exchangeLikeFallback: row.exchangeLikeFallback,
+      graphLinkedToWhitelistedExchange: row.graphLinkedToWhitelistedExchange,
+      candidateSignalExchangeInfra: row.candidateSignalExchangeInfra,
+      securityTags: row.securityTags,
     });
     const label = labelForRow(
       row.counterpartyAddress,

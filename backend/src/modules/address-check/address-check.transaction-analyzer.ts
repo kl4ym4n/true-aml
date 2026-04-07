@@ -1,5 +1,8 @@
 import { IBlockchainClient } from '../../lib/blockchain-client.interface';
-import { TAINT_STABLECOIN_SYMBOLS } from './address-check.constants';
+import {
+  TAINT_STABLECOIN_CONTRACT_ADDRESSES,
+  TAINT_STABLECOIN_SYMBOLS,
+} from './address-check.constants';
 
 /**
  * Normalized transaction row used by analyzers. Provider payloads are mapped in
@@ -36,9 +39,19 @@ export interface Transaction {
 export class TransactionAnalyzer {
   constructor(private blockchainClient: IBlockchainClient) {}
 
-  private isTaintStablecoin(symbol?: string): boolean {
-    if (!symbol) return false;
-    return TAINT_STABLECOIN_SYMBOLS.has(symbol.toUpperCase());
+  /** True if this TRC20 row is USDT/USDC by symbol or by mainnet contract address. */
+  private isTaintStablecoinToken(tokenInfo?: {
+    symbol?: string;
+    address?: string;
+  } | null): boolean {
+    if (!tokenInfo) return false;
+    const contract = tokenInfo.address?.trim();
+    if (contract && TAINT_STABLECOIN_CONTRACT_ADDRESSES.has(contract)) {
+      return true;
+    }
+    const sym = tokenInfo.symbol?.trim();
+    if (!sym) return false;
+    return TAINT_STABLECOIN_SYMBOLS.has(sym.toUpperCase());
   }
 
   private normalizeTokenAmount(
@@ -127,7 +140,10 @@ export class TransactionAnalyzer {
    * Uses getTransactions (only_to) only; does not use getTRC20Transactions (not available in TronScan API).
    * Counts only transfers that have tokenInfo (TRC20); ignores plain TRX transfers.
    */
-  async fetchTRC20IncomingVolumes(address: string): Promise<{
+  async fetchTRC20IncomingVolumes(
+    address: string,
+    opts?: { debug?: boolean }
+  ): Promise<{
     totalVolume: number;
     volumeByCounterparty: Map<string, number>;
     pagesFetched: number;
@@ -144,6 +160,11 @@ export class TransactionAnalyzer {
     let scannedTxCount = 0;
     let stablecoinTxCount = 0;
     let truncated = false;
+    const tokenSymbolsSeen = new Set<string>();
+    let skippedToMismatch = 0;
+    let skippedNoTokenInfo = 0;
+    let skippedNonStablecoin = 0;
+    let skippedNonPositiveAmount = 0;
     try {
       const normalizedAddress = address.toLowerCase();
 
@@ -154,6 +175,7 @@ export class TransactionAnalyzer {
           start: page * pageLimit,
         });
         const list = response.data || [];
+        console.log(list);
         if (list.length === 0) break;
         pagesFetched++;
         scannedTxCount += list.length;
@@ -168,18 +190,34 @@ export class TransactionAnalyzer {
           }
 
           const to = tx.to ?? '';
-          if (to.toLowerCase() !== normalizedAddress) continue;
+          if (to.toLowerCase() !== normalizedAddress) {
+            skippedToMismatch++;
+            continue;
+          }
           // Only TRC20: count when tokenInfo is present (token transfer); skip plain TRX
           const tokenInfo = tx.tokenInfo;
-          if (!tokenInfo) continue;
-          if (!this.isTaintStablecoin(tokenInfo.symbol)) continue;
+          // console.log(tokenInfo);
+          if (!tokenInfo) {
+            skippedNoTokenInfo++;
+            continue;
+          }
+          if (tokenInfo.symbol) tokenSymbolsSeen.add(tokenInfo.symbol);
+          else if (tokenInfo.address)
+            tokenSymbolsSeen.add(`contract:${tokenInfo.address}`);
+          if (!this.isTaintStablecoinToken(tokenInfo)) {
+            skippedNonStablecoin++;
+            continue;
+          }
           stablecoinTxCount++;
           const from = tx.from ?? '';
           const amount = this.normalizeTokenAmount(
             tx.amount,
             tokenInfo.decimals
           );
-          if (amount <= 0) continue;
+          if (amount <= 0) {
+            skippedNonPositiveAmount++;
+            continue;
+          }
           totalVolume += amount;
           volumeByCounterparty.set(
             from,
@@ -194,6 +232,22 @@ export class TransactionAnalyzer {
       truncated = pagesFetched >= maxPages;
     } catch {
       // return zeros
+    }
+    if (opts?.debug) {
+      console.log(`[TransactionAnalyzer] Stablecoin incoming scan summary`, {
+        address,
+        pagesFetched,
+        scannedTxCount,
+        stablecoinTxCount,
+        stablecoinIncomingTotal: totalVolume,
+        uniqueCounterparties: volumeByCounterparty.size,
+        tokenSymbolsSeen: Array.from(tokenSymbolsSeen).slice(0, 25),
+        skippedToMismatch,
+        skippedNoTokenInfo,
+        skippedNonStablecoin,
+        skippedNonPositiveAmount,
+        truncated,
+      });
     }
     return {
       totalVolume,
@@ -254,7 +308,7 @@ export class TransactionAnalyzer {
           if (from.toLowerCase() !== normalizedAddress) continue;
           const tokenInfo = tx.tokenInfo;
           if (!tokenInfo) continue;
-          if (!this.isTaintStablecoin(tokenInfo.symbol)) continue;
+          if (!this.isTaintStablecoinToken(tokenInfo)) continue;
           stablecoinTxCount++;
           const to = tx.to ?? '';
           const amount = this.normalizeTokenAmount(

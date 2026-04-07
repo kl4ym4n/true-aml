@@ -13,9 +13,14 @@ export const checkAddress = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { address } = req.body;
+    const { address, debugSof } = req.body as {
+      address: string;
+      debugSof?: boolean;
+    };
 
-    const result = await addressCheckService.analyzeAddress(address);
+    const result = await addressCheckService.analyzeAddress(address, {
+      debugSof,
+    });
 
     // Determine risk level based on score ranges
     // 0–20 → clean (LOW), 21–40 → low risk (LOW), 41–60 → medium risk (MEDIUM), 61–80 → high risk (HIGH), 81–100 → critical (CRITICAL)
@@ -48,8 +53,20 @@ export const checkAddress = async (
           ...(metadata.allTrc20IncomingVolume !== undefined && {
             allTrc20IncomingVolume: metadata.allTrc20IncomingVolume,
           }),
+          ...(metadata.stablecoinIncomingVolume !== undefined && {
+            stablecoinIncomingVolume: metadata.stablecoinIncomingVolume,
+          }),
           ...(metadata.totalIncomingVolume !== undefined && {
             totalIncomingVolume: metadata.totalIncomingVolume,
+          }),
+          ...(metadata.hasStablecoinSourceSample !== undefined && {
+            hasStablecoinSourceSample: metadata.hasStablecoinSourceSample,
+          }),
+          ...(metadata.stablecoinSourceSampleReason !== undefined && {
+            stablecoinSourceSampleReason: metadata.stablecoinSourceSampleReason,
+          }),
+          ...(metadata.walletActivityContext !== undefined && {
+            walletActivityContext: metadata.walletActivityContext,
           }),
           ...(metadata.taintInput !== undefined && {
             taintInput: metadata.taintInput,
@@ -79,6 +96,12 @@ export const checkAddress = async (
           }),
           ...(metadata.sourceFlowCalibration !== undefined && {
             sourceFlowCalibration: metadata.sourceFlowCalibration,
+          }),
+          ...(metadata.sourceOfFundsSampleDebug !== undefined && {
+            sourceOfFundsSampleDebug: metadata.sourceOfFundsSampleDebug,
+          }),
+          ...(metadata.walletContext !== undefined && {
+            walletContext: metadata.walletContext,
           }),
           ...(metadata.explanation !== undefined &&
             metadata.explanation.length > 0 && {

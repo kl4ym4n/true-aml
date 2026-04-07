@@ -70,3 +70,20 @@ export type { CounterpartyOnchainStats } from './counterparty-onchain-stats';
 
 export { isExchangeLikeCounterparty } from './exchange-like';
 export { computeBehavioralPatternScore } from './behavioral-pattern-score';
+
+export {
+  resolveTrustedSourceSemantics,
+  securityTagsSuggestExchangeRail,
+  isDangerousSourceSemantics,
+} from './trusted-source-semantics';
+export type {
+  TrustedSourceReason,
+  TrustedSourceSemanticsInput,
+} from './trusted-source-semantics';
+
+export {
+  findAddressesGraphLinkedToStrongWhitelist,
+  findAddressesCandidateExchangeInfra,
+} from './graph-sof-trusted';
+
+export { computeWalletContextHints } from './wallet-context-hints';
