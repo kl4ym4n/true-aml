@@ -44,6 +44,11 @@ export function isStrongWhitelistedExchange(address: string): boolean {
   return STRONG_WHITELIST.has(address);
 }
 
+/** For graph / batch queries (e.g. AddressEdge OR conditions). */
+export function getStrongWhitelistAddressList(): string[] {
+  return Array.from(STRONG_WHITELIST);
+}
+
 export function getWhitelistLevel(address: string): WhitelistLevel | null {
   if (!address) return null;
   if (STRONG_WHITELIST.has(address)) {

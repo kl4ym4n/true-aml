@@ -31,6 +31,8 @@ export interface SourceBreakdown {
     suspicious: number;
     dangerous: number;
   };
+  sampleEmpty?: boolean;
+  note?: string;
   trusted: Record<string, number>;
   suspicious: Record<string, number>;
   dangerous: Record<string, number>;
@@ -63,7 +65,15 @@ export interface AddressCheckResponse {
     };
     sourceBreakdown?: SourceBreakdown;
     allTrc20IncomingVolume?: number;
+    stablecoinIncomingVolume?: number;
     totalIncomingVolume?: number;
+    hasStablecoinSourceSample?: boolean;
+    stablecoinSourceSampleReason?: string;
+    walletActivityContext?: {
+      hasIncomingActivity: boolean;
+      incomingTxCount: number;
+      hasStablecoinIncomingActivity: boolean;
+    };
     taintInput?: {
       symbols: string[];
       pagesFetched: number;
@@ -111,6 +121,24 @@ export interface AddressCheckResponse {
       postWhitelistScore: number;
     };
     explanation?: string[];
+    walletContext?: {
+      exchangeLikeWalletProfile: boolean;
+      trustedContextOutsideSample: boolean;
+      note?: string;
+    };
+    sourceOfFundsSampleDebug?: {
+      aggregation: {
+        sumTrustedVolume: number;
+        sumSuspiciousVolume: number;
+        sumDangerousVolume: number;
+        numberOfTrustedRows: number;
+        numberOfExchangeOrWhitelistRows: number;
+        numberOfWhitelistMatches: number;
+        numberOfGraphTrustedLinks: number;
+        numberOfCandidateInfraMatches: number;
+      };
+      counterparties: Array<Record<string, unknown>>;
+    };
   };
 }
 

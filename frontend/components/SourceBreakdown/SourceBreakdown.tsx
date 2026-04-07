@@ -5,6 +5,12 @@ import styles from './SourceBreakdown.module.css';
 
 interface SourceBreakdownProps {
   sourceBreakdown: SourceBreakdownType;
+  /** When the stablecoin sample is all “suspicious” but the wallet looks CEX-like overall. */
+  walletContext?: {
+    exchangeLikeWalletProfile: boolean;
+    trustedContextOutsideSample: boolean;
+    note?: string;
+  };
 }
 
 function fundSourceInsight(s: {
@@ -32,7 +38,10 @@ function sortEntriesDesc(entries: [string, number][]): [string, number][] {
   return [...entries].sort((a, b) => b[1] - a[1]);
 }
 
-export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProps) {
+export default function SourceBreakdown({
+  sourceBreakdown,
+  walletContext,
+}: SourceBreakdownProps) {
   const s = sourceBreakdown.summary;
   const insight = s ? fundSourceInsight(s) : null;
 
@@ -47,7 +56,17 @@ export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProp
   return (
     <div className={styles.sourceBreakdown}>
       <span className={styles.sourceBreakdownTitle}>Sources of funds</span>
-      {s && (
+      {sourceBreakdown.sampleEmpty && (
+        <div className={styles.profileBlock}>
+          <p className={styles.profileCaption}>
+            No <strong>incoming USDT/USDC</strong> transfers were found in the analyzed source-of-funds sample, so this breakdown is unavailable.
+          </p>
+          {sourceBreakdown.note && (
+            <p className={styles.profileInsight}>{sourceBreakdown.note}</p>
+          )}
+        </div>
+      )}
+      {s && !sourceBreakdown.sampleEmpty && (
         <div className={styles.profileBlock}>
           <p className={styles.profileCaption}>
             Split of <strong>analyzed USDT/USDC inflow</strong> by AML bucket (not the same as raw on-chain
@@ -89,6 +108,9 @@ export default function SourceBreakdown({ sourceBreakdown }: SourceBreakdownProp
             </li>
           </ul>
           {insight && <p className={styles.profileInsight}>{insight}</p>}
+          {walletContext?.note && (
+            <p className={styles.walletContextNote}>{walletContext.note}</p>
+          )}
         </div>
       )}
       <div className={styles.sourceBreakdownGrid}>

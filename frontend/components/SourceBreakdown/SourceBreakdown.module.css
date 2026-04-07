@@ -92,6 +92,17 @@
   background: #c82333;
 }
 
+.walletContextNote {
+  margin: 0.5rem 0 0;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #444;
+  background: #f0f7ff;
+  border-radius: 6px;
+  border: 1px solid #cfe2ff;
+}
+
 .profileInsight {
   margin: 0;
   padding: 0.65rem 0.75rem;

@@ -224,3 +224,54 @@ export interface TronScanLiquidityOperation {
   amount_b?: string;
   user_address?: string;
 }
+
+/** Normalized row from GET /api/token_trc20/transfers (TronScan). */
+export interface NormalizedTronScanTRC20Transfer {
+  txHash: string;
+  timestamp: number;
+  fromAddress: string;
+  toAddress: string;
+  contractAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
+  tokenDecimals: number;
+  rawAmount: string;
+  amount: number;
+  confirmed: boolean;
+}
+
+/** Raw TronScan token_trc20/transfers item (field names vary slightly). */
+export interface TronScanTokenTrc20TransferRaw {
+  transaction_id?: string;
+  block_ts?: number;
+  from_address?: string;
+  to_address?: string;
+  contract_address?: string;
+  quant?: string;
+  confirmed?: boolean;
+  token_info?: {
+    tokenAbbr?: string;
+    tokenName?: string;
+    tokenDecimal?: number;
+    symbol?: string;
+    name?: string;
+    decimals?: number;
+  };
+  [key: string]: unknown;
+}
+
+export interface TronScanTokenTrc20TransfersResponse {
+  total?: number;
+  rangeTotal?: number;
+  token_transfers?: TronScanTokenTrc20TransferRaw[];
+  data?: TronScanTokenTrc20TransferRaw[];
+  contractInfo?: Record<
+    string,
+    {
+      name?: string;
+      tag1?: string;
+      isToken?: boolean;
+      [key: string]: unknown;
+    }
+  >;
+}

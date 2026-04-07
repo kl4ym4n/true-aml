@@ -46,7 +46,13 @@ async function testWhitelist(): Promise<void> {
 async function testIncomingVolumePagination(): Promise<void> {
   const address = 'TADDRESS';
   let calls = 0;
-  const mockClient: Pick<IBlockchainClient, 'getTransactions'> = {
+  const mockClient: Pick<
+    IBlockchainClient,
+    'getTransactions' | 'getStablecoinTrc20Transfers'
+  > = {
+    async getStablecoinTrc20Transfers() {
+      throw new Error('test: force legacy tx-list path');
+    },
     async getTransactions(_address: string, options?: { start?: number }) {
       calls++;
       if ((options?.start ?? 0) === 0) {

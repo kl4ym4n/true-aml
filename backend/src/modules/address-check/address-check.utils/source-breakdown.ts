@@ -2,6 +2,57 @@ import type { RiskFlag, SourceBreakdown } from '../address-check.types';
 import { classifySourceBucket } from './source-bucket-classifier';
 import { isStrongWhitelistedExchange } from './whitelist';
 
+function clamp01Pct(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n));
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Make sure trusted+suspicious+dangerous sums to 100.00 after rounding.
+ * We assign drift to the largest bucket to avoid pushing a small bucket negative.
+ */
+function normalizeSummaryTo100(summary: {
+  trusted: number;
+  suspicious: number;
+  dangerous: number;
+}): { trusted: number; suspicious: number; dangerous: number } {
+  const t = clamp01Pct(round2(summary.trusted));
+  const s = clamp01Pct(round2(summary.suspicious));
+  const d = clamp01Pct(round2(summary.dangerous));
+
+  const sum = round2(t + s + d);
+  const drift = round2(100 - sum);
+  if (Math.abs(drift) < 0.0001) {
+    return { trusted: t, suspicious: s, dangerous: d };
+  }
+
+  const buckets = (
+    [
+      { k: 'trusted', v: t },
+      { k: 'suspicious', v: s },
+      { k: 'dangerous', v: d },
+    ] as const
+  ).slice().sort((a, b) => b.v - a.v);
+
+  const pick = buckets[0]?.k ?? 'suspicious';
+  const out = { trusted: t, suspicious: s, dangerous: d };
+  out[pick] = clamp01Pct(round2(out[pick] + drift));
+
+  // If clamping prevented full drift absorption, re-normalize conservatively.
+  const sum2 = round2(out.trusted + out.suspicious + out.dangerous);
+  const drift2 = round2(100 - sum2);
+  if (Math.abs(drift2) >= 0.0001) {
+    const pick2 = buckets[1]?.k ?? pick;
+    out[pick2] = clamp01Pct(round2(out[pick2] + drift2));
+  }
+
+  return out;
+}
+
 export interface VolumeWeightedSourceRow {
   counterpartyAddress: string;
   /** Share of analyzed stablecoin inflow (0..1). */
@@ -12,6 +63,9 @@ export interface VolumeWeightedSourceRow {
   blacklistCategory?: string | null;
   /** SoF-only: trusted via diffuse inflow heuristics (not direct entity label). */
   exchangeLikeFallback?: boolean;
+  graphLinkedToWhitelistedExchange?: boolean;
+  candidateSignalExchangeInfra?: boolean;
+  securityTags?: string[] | null;
 }
 
 function labelForRow(
@@ -109,6 +163,9 @@ export function computeExchangeTrustedShare01(
       flags: r.flags,
       blacklistCategory: r.blacklistCategory,
       exchangeLikeFallback: r.exchangeLikeFallback,
+      graphLinkedToWhitelistedExchange: r.graphLinkedToWhitelistedExchange,
+      candidateSignalExchangeInfra: r.candidateSignalExchangeInfra,
+      securityTags: r.securityTags,
     });
     if (bucket !== 'trusted') continue;
     if (
@@ -139,7 +196,10 @@ export function computeVolumeWeightedSourceBreakdown(
   let dangerous = 0;
 
   const analyzed = rows.reduce((s, r) => s + r.volumeShare, 0);
-  const scale = analyzed > 0 ? 100 / analyzed : 0;
+  // `trusted/suspicious/dangerous` and detail maps are accumulated in PERCENT points (0..100),
+  // while `analyzed` is a SHARE sum (0..1). To normalize percentages over the analyzed subset,
+  // multiply percent-points by (1 / analyzed). (Do NOT multiply by 100 again.)
+  const scale = analyzed > 0 ? 1 / analyzed : 0;
 
   for (const row of rows) {
     const wPct = row.volumeShare * 100;
@@ -149,6 +209,9 @@ export function computeVolumeWeightedSourceBreakdown(
       flags: row.flags,
       blacklistCategory: row.blacklistCategory,
       exchangeLikeFallback: row.exchangeLikeFallback,
+      graphLinkedToWhitelistedExchange: row.graphLinkedToWhitelistedExchange,
+      candidateSignalExchangeInfra: row.candidateSignalExchangeInfra,
+      securityTags: row.securityTags,
     });
     const label = labelForRow(
       row.counterpartyAddress,
@@ -171,7 +234,6 @@ export function computeVolumeWeightedSourceBreakdown(
     }
   }
 
-  const round2 = (n: number) => Math.round(n * 100) / 100;
   const normMap = (d: Record<string, number>) =>
     Object.fromEntries(
       Object.entries(d).map(([k, v]) => [k, round2(v * scale)])
@@ -180,14 +242,13 @@ export function computeVolumeWeightedSourceBreakdown(
   const st = round2(trusted * scale);
   const su = round2(suspicious * scale);
   const da = round2(dangerous * scale);
-  const drift = round2(100 - (st + su + da));
-  const suspiciousAdj = round2(su + drift);
+  const summary = normalizeSummaryTo100({ trusted: st, suspicious: su, dangerous: da });
 
   return {
     summary: {
-      trusted: st,
-      suspicious: suspiciousAdj,
-      dangerous: da,
+      trusted: summary.trusted,
+      suspicious: summary.suspicious,
+      dangerous: summary.dangerous,
     },
     trusted: normMap(trustedDetail),
     suspicious: normMap(suspiciousDetail),
@@ -275,12 +336,14 @@ export function computeSourceBreakdown(
   const da = pct(bucketDangerous);
   const norm = st + su + da > 0 ? 100 / (st + su + da) : 1;
 
+  const summary = normalizeSummaryTo100({
+    trusted: Math.round(st * norm * 100) / 100,
+    suspicious: Math.round(su * norm * 100) / 100,
+    dangerous: Math.round(da * norm * 100) / 100,
+  });
+
   return {
-    summary: {
-      trusted: Math.round(st * norm * 100) / 100,
-      suspicious: Math.round(su * norm * 100) / 100,
-      dangerous: Math.round(da * norm * 100) / 100,
-    },
+    summary,
     trusted: Object.fromEntries(
       Object.entries(trusted).map(([k, v]) => [k, pct(v)])
     ),

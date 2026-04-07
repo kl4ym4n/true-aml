@@ -65,6 +65,35 @@ export interface TransactionsOptions {
   end_timestamp?: number;
 }
 
+/** Normalized TRC20 transfer (TronScan token_trc20/transfers or TronGrid equivalent). */
+export interface NormalizedTrc20Transfer {
+  txHash: string;
+  timestamp: number;
+  fromAddress: string;
+  toAddress: string;
+  contractAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
+  tokenDecimals: number;
+  rawAmount: string;
+  amount: number;
+  confirmed: boolean;
+}
+
+export interface StablecoinTrc20TransfersResult {
+  transfers: NormalizedTrc20Transfer[];
+  meta: {
+    pagesFetched: number;
+    totalRowsFetched: number;
+    matchedTransfers: number;
+    uniqueCounterparties: number;
+    contractsSeen: string[];
+    tokenSymbolsSeen: string[];
+    totalNormalizedVolume: number;
+    truncated: boolean;
+  };
+}
+
 /**
  * Interface for blockchain data providers
  * Allows easy switching between different providers (TronGrid, TronScan, etc.)
@@ -101,4 +130,20 @@ export interface IBlockchainClient {
     address: string,
     options?: TransactionsOptions
   ): Promise<TransactionsResponse>;
+
+  /**
+   * Stablecoin (USDT/USDC) TRC20 transfers by contract — used for SoF / taint only.
+   * Must not use generic /api/transaction; TronScan uses /api/token_trc20/transfers.
+   */
+  getStablecoinTrc20Transfers(
+    address: string,
+    options: {
+      direction: 'incoming' | 'outgoing';
+      contractAddresses: string[];
+      maxPages?: number;
+      pageSize?: number;
+      confirm?: boolean;
+      debug?: boolean;
+    }
+  ): Promise<StablecoinTrc20TransfersResult>;
 }

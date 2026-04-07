@@ -1,4 +1,7 @@
-import { IBlockchainClient } from '../blockchain-client.interface';
+import {
+  IBlockchainClient,
+  StablecoinTrc20TransfersResult,
+} from '../blockchain-client.interface';
 import { TronGridAdapter } from './tron-grid.adapter';
 import { TronScanAdapter } from './tron-scan.adapter';
 
@@ -97,5 +100,22 @@ class CompositeBlockchainClient implements IBlockchainClient {
       console.warn('TronGrid failed, falling back to TronScan:', error);
       return await this.tronscanClient.getTRC20Transactions(address, options);
     }
+  }
+
+  /**
+   * SoF / taint stablecoin sample: always TronScan (token_trc20/transfers), not generic tx history.
+   */
+  async getStablecoinTrc20Transfers(
+    address: string,
+    options: {
+      direction: 'incoming' | 'outgoing';
+      contractAddresses: string[];
+      maxPages?: number;
+      pageSize?: number;
+      confirm?: boolean;
+      debug?: boolean;
+    }
+  ): Promise<StablecoinTrc20TransfersResult> {
+    return this.tronscanClient.getStablecoinTrc20Transfers(address, options);
   }
 }
