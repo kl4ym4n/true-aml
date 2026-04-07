@@ -141,6 +141,13 @@ export interface AddressAnalysisMetadata {
   hasStablecoinSourceSample?: boolean;
   /** Why stablecoin sample is empty/unavailable (when `hasStablecoinSourceSample === false`). */
   stablecoinSourceSampleReason?: string;
+  /**
+   * Warning when stablecoin SoF fetch was degraded (e.g. provider errors, retries, fallback).
+   * UI should treat SoF/taint as potentially incomplete when present.
+   */
+  stablecoinSofWarning?: string;
+  /** Which dataset powered stablecoin SoF/taint calculation. */
+  stablecoinSofDataSource?: 'tronscan_transfers' | 'legacy_tx_list';
   /** Minimal wallet-level activity context (independent from stablecoin SoF sample). */
   walletActivityContext?: {
     hasIncomingActivity: boolean;

@@ -26,23 +26,12 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
     isPositiveNumber(stablecoinIncoming) ||
     isPositiveNumber(metadata.riskyIncomingVolume);
 
-  const taintStats = metadata.taintCalculationStats;
-  const hasMeaningfulTaintStats =
-    taintStats != null &&
-    (taintStats.maxConsidered > 0 ||
-      taintStats.checkedCounterparties > 0 ||
-      taintStats.analyzedCounterparties > 0 ||
-      (taintStats.skippedVisited ?? 0) > 0 ||
-      (taintStats.skippedDust ?? 0) > 0 ||
-      (taintStats.counterpartyCacheHits ?? 0) > 0 ||
-      (taintStats.counterpartyCacheMisses ?? 0) > 0);
-
   return (
-    <ResultCard title="Analysis Result">
+    <ResultCard title="Result">
       <div className={styles.resultGrid}>
         {result.address && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Address</span>
+            <span className={styles.label}>Wallet</span>
             <div className={styles.addressRow}>
               <code className={styles.address}>{result.address}</code>
               <CopyButton text={result.address} />
@@ -59,7 +48,7 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
         </div>
         {metadata.addressSecurity?.riskLevel && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Security Provider Level</span>
+            <span className={styles.label}>Security</span>
             <span className={styles.value}>{metadata.addressSecurity.riskLevel}</span>
           </div>
         )}
@@ -77,33 +66,32 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
         )}
         {metadata.isBlacklisted && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Blacklist Status</span>
-            <span className={styles.warning}>Blacklisted</span>
+            <span className={styles.label}>Blacklist</span>
+            <span className={styles.warning}>Yes</span>
           </div>
         )}
         {hasTaintData && (
           <div className={styles.section}>
-            <span className={styles.sectionTitle}>Taint Analysis</span>
-            <div className={styles.hint}>
-              Taint is computed from <strong>incoming USDT/USDC only</strong> (same basis as “Stablecoin
-              Incoming”).
-            </div>
+            <span className={styles.sectionTitle}>Taint (USDT/USDC)</span>
+            {metadata.stablecoinSofWarning && (
+              <div className={styles.hint}>{metadata.stablecoinSofWarning}</div>
+            )}
             <div className={styles.kvGrid}>
               {isPositiveNumber(metadata.taintPercent) && (
                 <div className={styles.kvRow}>
-                  <span>Taint Percent</span>
-                  <strong>{metadata.taintPercent!.toFixed(2)}%</strong>
+                  <span>Taint</span>
+                  <strong>{metadata.taintPercent!.toFixed(1)}%</strong>
                 </div>
               )}
               {isPositiveNumber(stablecoinIncoming) && (
                 <div className={styles.kvRow}>
-                  <span>Stablecoin Incoming (USDT/USDC)</span>
+                  <span>Inflow</span>
                   <strong>{stablecoinIncoming!.toFixed(2)}</strong>
                 </div>
               )}
               {isPositiveNumber(metadata.riskyIncomingVolume) && (
                 <div className={styles.kvRow}>
-                  <span>Risky Stablecoin Incoming</span>
+                  <span>Risky inflow</span>
                   <strong>{metadata.riskyIncomingVolume!.toFixed(2)}</strong>
                 </div>
               )}
@@ -113,7 +101,7 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
 
         {metadata.explanation && metadata.explanation.length > 0 && (
           <div className={styles.section}>
-            <span className={styles.sectionTitle}>AML Explanation</span>
+            <span className={styles.sectionTitle}>Explanation</span>
             <ul className={styles.explanationList}>
               {metadata.explanation.map((line, idx) => (
                 <li key={idx}>{line}</li>
@@ -124,37 +112,37 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
 
         {metadata.scoreBreakdown && (
           <div className={styles.section}>
-            <span className={styles.sectionTitle}>Score Breakdown</span>
+            <span className={styles.sectionTitle}>Score</span>
             <div className={styles.kvGrid}>
               <div className={styles.kvRow}>
-                <span>Base Risk</span>
-                <strong>{metadata.scoreBreakdown.baseRiskScore.toFixed(2)}</strong>
+                <span>Base</span>
+                <strong>{metadata.scoreBreakdown.baseRiskScore.toFixed(1)}</strong>
               </div>
               {Math.abs(metadata.scoreBreakdown.taintScore) > 1e-9 && (
                 <div className={styles.kvRow}>
-                  <span>Taint Score</span>
-                  <strong>{metadata.scoreBreakdown.taintScore.toFixed(2)}</strong>
+                  <span>Taint</span>
+                  <strong>{metadata.scoreBreakdown.taintScore.toFixed(1)}</strong>
                 </div>
               )}
               <div className={styles.kvRow}>
-                <span>Behavior Score</span>
-                <strong>{metadata.scoreBreakdown.behavioralScore.toFixed(2)}</strong>
+                <span>Behavior</span>
+                <strong>{metadata.scoreBreakdown.behavioralScore.toFixed(1)}</strong>
               </div>
               <div className={styles.kvRow}>
-                <span>Volume Score</span>
-                <strong>{metadata.scoreBreakdown.volumeScore.toFixed(2)}</strong>
+                <span>Volume</span>
+                <strong>{metadata.scoreBreakdown.volumeScore.toFixed(1)}</strong>
               </div>
               <div className={styles.kvRow}>
-                <span>Pre-Whitelist</span>
-                <strong>{metadata.scoreBreakdown.preWhitelistScore.toFixed(2)}</strong>
+                <span>Before WL</span>
+                <strong>{metadata.scoreBreakdown.preWhitelistScore.toFixed(1)}</strong>
               </div>
               <div className={styles.kvRow}>
-                <span>Post-Whitelist</span>
-                <strong>{metadata.scoreBreakdown.postWhitelistScore.toFixed(2)}</strong>
+                <span>After WL</span>
+                <strong>{metadata.scoreBreakdown.postWhitelistScore.toFixed(1)}</strong>
               </div>
               {metadata.scoreBreakdown.whitelistLevel && (
                 <div className={styles.kvRow}>
-                  <span>Whitelist Level</span>
+                  <span>WL</span>
                   <strong>{metadata.scoreBreakdown.whitelistLevel}</strong>
                 </div>
               )}
@@ -165,16 +153,16 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
         {metadata.topRiskyCounterparties &&
           metadata.topRiskyCounterparties.length > 0 && (
             <div className={styles.section}>
-              <span className={styles.sectionTitle}>Top Counterparties</span>
+              <span className={styles.sectionTitle}>Counterparties</span>
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
                     <tr>
                       <th>Address</th>
-                      <th>Volume</th>
-                      <th>Score</th>
-                      <th>Entity</th>
-                      <th>Risky</th>
+                      <th>Vol.</th>
+                      <th>Scr.</th>
+                      <th>Type</th>
+                      <th>Risk</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -196,56 +184,6 @@ export default function AddressResultCard({ result }: AddressResultCardProps) {
               </div>
             </div>
           )}
-
-        {hasMeaningfulTaintStats && taintStats && (
-          <div className={styles.section}>
-            <span className={styles.sectionTitle}>Taint Stats</span>
-            <div className={styles.kvGrid}>
-              {taintStats.maxConsidered > 0 && (
-                <div className={styles.kvRow}>
-                  <span>Max Considered</span>
-                  <strong>{taintStats.maxConsidered}</strong>
-                </div>
-              )}
-              {taintStats.checkedCounterparties > 0 && (
-                <div className={styles.kvRow}>
-                  <span>Checked</span>
-                  <strong>{taintStats.checkedCounterparties}</strong>
-                </div>
-              )}
-              {taintStats.analyzedCounterparties > 0 && (
-                <div className={styles.kvRow}>
-                  <span>Analyzed</span>
-                  <strong>{taintStats.analyzedCounterparties}</strong>
-                </div>
-              )}
-              {(taintStats.skippedVisited ?? 0) > 0 && (
-                <div className={styles.kvRow}>
-                  <span>Skipped (visited)</span>
-                  <strong>{taintStats.skippedVisited}</strong>
-                </div>
-              )}
-              {(taintStats.skippedDust ?? 0) > 0 && (
-                <div className={styles.kvRow}>
-                  <span>Skipped (dust)</span>
-                  <strong>{taintStats.skippedDust}</strong>
-                </div>
-              )}
-              {(taintStats.counterpartyCacheHits ?? 0) > 0 && (
-                <div className={styles.kvRow}>
-                  <span>Cache hits</span>
-                  <strong>{taintStats.counterpartyCacheHits}</strong>
-                </div>
-              )}
-              {(taintStats.counterpartyCacheMisses ?? 0) > 0 && (
-                <div className={styles.kvRow}>
-                  <span>Cache misses</span>
-                  <strong>{taintStats.counterpartyCacheMisses}</strong>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {metadata.sourceBreakdown && (
           <SourceBreakdown

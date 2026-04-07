@@ -55,11 +55,11 @@ export default function SourceBreakdown({
 
   return (
     <div className={styles.sourceBreakdown}>
-      <span className={styles.sourceBreakdownTitle}>Sources of funds</span>
+      <span className={styles.sourceBreakdownTitle}>Source of funds</span>
       {sourceBreakdown.sampleEmpty && (
         <div className={styles.profileBlock}>
           <p className={styles.profileCaption}>
-            No <strong>incoming USDT/USDC</strong> transfers were found in the analyzed source-of-funds sample, so this breakdown is unavailable.
+            No USDT/USDC inflow in this sample — breakdown unavailable.
           </p>
           {sourceBreakdown.note && (
             <p className={styles.profileInsight}>{sourceBreakdown.note}</p>
@@ -69,8 +69,7 @@ export default function SourceBreakdown({
       {s && !sourceBreakdown.sampleEmpty && (
         <div className={styles.profileBlock}>
           <p className={styles.profileCaption}>
-            Split of <strong>analyzed USDT/USDC inflow</strong> by AML bucket (not the same as raw on-chain
-            “all tokens”).
+            USDT/USDC inflow by bucket (not all on-chain tokens).
           </p>
           <div
             className={styles.barTrack}
@@ -96,15 +95,15 @@ export default function SourceBreakdown({
           <ul className={styles.profileLegend}>
             <li>
               <span className={styles.legendSwatchTrusted} aria-hidden />
-              Trusted <strong>{t.toFixed(1)}%</strong>
+              Trusted <strong>{t.toFixed(0)}%</strong>
             </li>
             <li>
               <span className={styles.legendSwatchSuspicious} aria-hidden />
-              Suspicious <strong>{u.toFixed(1)}%</strong>
+              Suspicious <strong>{u.toFixed(0)}%</strong>
             </li>
             <li>
               <span className={styles.legendSwatchDangerous} aria-hidden />
-              Dangerous <strong>{d.toFixed(1)}%</strong>
+              Dangerous <strong>{d.toFixed(0)}%</strong>
             </li>
           </ul>
           {insight && <p className={styles.profileInsight}>{insight}</p>}
@@ -117,84 +116,81 @@ export default function SourceBreakdown({
         <div className={styles.sourceCategory}>
           <div className={styles.sourceCategoryHeader}>
             <span className={styles.sourceCategoryIcon} aria-hidden>✓</span>
-            <span>Trusted sources</span>
+            <span>Trusted</span>
           </div>
           <ul className={styles.sourceList}>
             {trustedRows
               .filter(([, pct]) => pct > 0)
               .map(([name, pct]) => (
-                <li key={name} className={styles.sourceRow}>
+                <li
+                  key={name}
+                  className={styles.sourceRow}
+                  title={
+                    t > 0
+                      ? `${((pct / t) * 100).toFixed(0)}% of trusted bucket`
+                      : undefined
+                  }
+                >
                   <span>{name}</span>
-                  <span>
-                    {pct.toFixed(2)}% of inflow
-                    {t > 0 && (
-                      <span className={styles.pctOfBucket}>
-                        {' '}
-                        ({((pct / t) * 100).toFixed(0)}% of trusted)
-                      </span>
-                    )}
-                  </span>
+                  <span>{pct.toFixed(1)}%</span>
                 </li>
               ))}
             {Object.values(sourceBreakdown.trusted).every(v => v <= 0) && (
-              <li className={styles.sourceRowMuted}>No labeled trusted share in this sample</li>
+              <li className={styles.sourceRowMuted}>—</li>
             )}
           </ul>
         </div>
         <div className={styles.sourceCategorySuspicious}>
           <div className={styles.sourceCategoryHeader}>
             <span className={styles.sourceCategoryIconSuspicious} aria-hidden>⚠</span>
-            <span>Suspicious sources</span>
+            <span>Suspicious</span>
           </div>
-          <p className={styles.bucketHint}>
-            Sub-types below sum to the suspicious share (unknown peers, DeFi-style flow, DB flags, etc.).
-          </p>
           <ul className={styles.sourceList}>
             {suspiciousRows
               .filter(([, pct]) => pct > 0)
               .map(([name, pct]) => (
-                <li key={name} className={styles.sourceRow}>
+                <li
+                  key={name}
+                  className={styles.sourceRow}
+                  title={
+                    u > 0
+                      ? `${((pct / u) * 100).toFixed(0)}% of suspicious bucket`
+                      : undefined
+                  }
+                >
                   <span>{name}</span>
-                  <span>
-                    {pct.toFixed(2)}% of inflow
-                    {u > 0 && (
-                      <span className={styles.pctOfBucket}>
-                        {' '}
-                        ({((pct / u) * 100).toFixed(0)}% of suspicious)
-                      </span>
-                    )}
-                  </span>
+                  <span>{pct.toFixed(1)}%</span>
                 </li>
               ))}
             {Object.values(sourceBreakdown.suspicious).every(v => v <= 0) && (
-              <li className={styles.sourceRowMuted}>None in this sample</li>
+              <li className={styles.sourceRowMuted}>—</li>
             )}
           </ul>
         </div>
         <div className={styles.sourceCategoryDangerous}>
           <div className={styles.sourceCategoryHeader}>
             <span className={styles.sourceCategoryIconDangerous} aria-hidden>●</span>
-            <span>Dangerous sources</span>
+            <span>Dangerous</span>
           </div>
           <ul className={styles.sourceList}>
             {dangerousRows
               .filter(([, pct]) => pct > 0)
               .map(([name, pct]) => (
-                <li key={name} className={styles.sourceRow}>
+                <li
+                  key={name}
+                  className={styles.sourceRow}
+                  title={
+                    d > 0
+                      ? `${((pct / d) * 100).toFixed(0)}% of dangerous bucket`
+                      : undefined
+                  }
+                >
                   <span>{name}</span>
-                  <span>
-                    {pct.toFixed(2)}% of inflow
-                    {d > 0 && (
-                      <span className={styles.pctOfBucket}>
-                        {' '}
-                        ({((pct / d) * 100).toFixed(0)}% of dangerous)
-                      </span>
-                    )}
-                  </span>
+                  <span>{pct.toFixed(1)}%</span>
                 </li>
               ))}
             {Object.values(sourceBreakdown.dangerous).every(v => v <= 0) && (
-              <li className={styles.sourceRowMuted}>None in this sample</li>
+              <li className={styles.sourceRowMuted}>—</li>
             )}
           </ul>
         </div>

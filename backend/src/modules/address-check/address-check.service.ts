@@ -300,6 +300,8 @@ export class AddressCheckService {
       taintBreakdownRows,
       sourceFlowCalibration,
       sourceOfFundsSampleDebug,
+      stablecoinSofWarning,
+      stablecoinSofDataSource,
     } = await this.runMultiHopIfNeeded(
       address,
       hopLevel,
@@ -403,6 +405,8 @@ export class AddressCheckService {
         stablecoinSourceSampleReason: hasStablecoinSourceSample
           ? undefined
           : 'No incoming USDT/USDC transfers in analyzed source-of-funds sample',
+        stablecoinSofWarning,
+        stablecoinSofDataSource,
         walletActivityContext: {
           hasIncomingActivity: transactionCount > 0,
           incomingTxCount: transactionCount,
@@ -554,6 +558,8 @@ export class AddressCheckService {
       stablecoinTxCount: number;
       truncated: boolean;
     };
+    stablecoinSofWarning?: string;
+    stablecoinSofDataSource?: 'tronscan_transfers' | 'legacy_tx_list';
     explanation: string[];
     taintBreakdownRows?: VolumeWeightedSourceRow[];
     sourceFlowCalibration?: SourceFlowCalibration;
@@ -587,6 +593,11 @@ export class AddressCheckService {
     let behavioralScore = 0;
     let volumeScore = 0;
     let taintInput = { ...emptyTaintInput };
+    let stablecoinSofWarning: string | undefined;
+    let stablecoinSofDataSource:
+      | 'tronscan_transfers'
+      | 'legacy_tx_list'
+      | undefined;
     const taintHints: string[] = [];
     let cumulativeTaintRaw = 0;
     let trustedShare01 = 0;
@@ -610,6 +621,8 @@ export class AddressCheckService {
         behavioralScore,
         volumeScore,
         taintInput,
+        stablecoinSofWarning,
+        stablecoinSofDataSource,
         explanation: [],
         taintBreakdownRows: undefined,
         sourceFlowCalibration: undefined,
@@ -627,10 +640,14 @@ export class AddressCheckService {
       scannedTxCount,
       stablecoinTxCount,
       truncated,
+      provider,
+      warning,
     } = await this.transactionAnalyzer.fetchTRC20IncomingVolumes(address, {
       debug: !!sofOpts?.debugSof,
     });
     stablecoinIncomingVolume = totalVolume;
+    stablecoinSofWarning = warning;
+    stablecoinSofDataSource = provider;
     taintInput = {
       symbols: ['USDT', 'USDC'],
       pagesFetched,
@@ -643,6 +660,8 @@ export class AddressCheckService {
       address,
       stablecoinIncomingTotal: totalVolume,
       counterpartyCount: volumeByCounterparty.size,
+      provider,
+      ...(warning ? { warning } : {}),
       pagesFetched,
       scannedTxCount,
       stablecoinTxCount,
@@ -674,6 +693,8 @@ export class AddressCheckService {
         behavioralScore,
         volumeScore,
         taintInput,
+        stablecoinSofWarning,
+        stablecoinSofDataSource,
         explanation: aml.explanation,
         taintBreakdownRows: undefined,
         sourceFlowCalibration: undefined,
@@ -1202,6 +1223,8 @@ export class AddressCheckService {
       behavioralScore,
       volumeScore,
       taintInput,
+      stablecoinSofWarning,
+      stablecoinSofDataSource,
       explanation: explanationDedup,
       taintBreakdownRows:
         taintBreakdownRows.length > 0 ? taintBreakdownRows : undefined,
