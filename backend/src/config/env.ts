@@ -26,6 +26,10 @@ interface EnvConfig {
   tronscanApiKey?: string;
   apiKey: string;
   blockchainProvider?: 'trongrid' | 'tronscan' | 'auto';
+  /** Mainnet USDT TRC20 (SoF / taint stablecoin sample). */
+  tronUsdtContract: string;
+  /** Mainnet USDC TRC20 (SoF / taint stablecoin sample). */
+  tronUsdcContract: string;
   ingestion: {
     enabled: boolean;
     ofacCsvPath?: string;
@@ -163,6 +167,13 @@ function validateEnv(): EnvConfig {
     (process.env.BLOCKCHAIN_PROVIDER as 'trongrid' | 'tronscan' | 'auto') ||
     'auto';
 
+  const tronUsdtContract =
+    process.env.TRON_USDT_CONTRACT?.trim() ||
+    'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  const tronUsdcContract =
+    process.env.TRON_USDC_CONTRACT?.trim() ||
+    'TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8';
+
   return {
     port,
     databaseUrl,
@@ -170,6 +181,8 @@ function validateEnv(): EnvConfig {
     tronscanApiKey,
     apiKey,
     blockchainProvider,
+    tronUsdtContract,
+    tronUsdcContract,
     ingestion: {
       enabled: ingestionEnabled,
       ofacCsvPath,

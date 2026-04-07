@@ -617,3 +617,139 @@ Trusted exchange flow is a semantic signal, not just a cosmetic label.
 
 If the model detects or knows exchange flow but still outputs 100% suspicious,
 the model is semantically wrong even if the raw risk score is low.
+
+# TRONSCAN TRANSFERS / SOURCE-OF-FUNDS RULES
+
+## 1. TRANSACTIONS ≠ TRANSFERS
+
+- /api/transaction → используется ТОЛЬКО для:
+  - общего профиля кошелька
+  - поведенческих паттернов (frequency, fan-in/out, etc.)
+
+- /api/token_trc20/transfers → используется ТОЛЬКО для:
+  - AML source-of-funds
+  - taint analysis
+  - stablecoin inflow
+
+Никогда не смешивать эти два источника.
+
+---
+
+## 2. SOURCE-OF-FUNDS СТРОИТСЯ ТОЛЬКО ПО TRANSFERS
+
+Для расчёта:
+- stablecoinIncomingVolume
+- volumeByCounterparty
+- taintPercent
+- sourceBreakdown
+
+использовать только TRC20 transfers.
+
+Не использовать:
+- getTransactions(...)
+- generic transaction list
+
+---
+
+## 3. ВХОДЯЩИЙ ОБЪЁМ = toAddress
+
+Incoming transfer определяется строго:
+
+- to_address == analyzed wallet
+
+Контрагент:
+- from_address
+
+Нельзя:
+- использовать relatedAddress без фильтра
+- смешивать входящие и исходящие
+
+---
+
+## 4. КОНТРАКТЫ ВАЖНЕЕ СИМВОЛОВ
+
+Никогда не полагаться только на:
+- "USDT"
+- "USDC"
+
+Всегда использовать:
+- contract_address
+
+Пример:
+- TRON_USDT_CONTRACT
+- TRON_USDC_CONTRACT
+
+---
+
+## 5. totalIncomingVolume ДОЛЖЕН БЫТЬ ЯВНЫМ
+
+Если считается только по стейблам:
+
+- НЕ называть это totalIncomingVolume
+- использовать:
+  - stablecoinIncomingVolume
+  - stablecoinSourceSampleVolume
+
+Иначе ломается логика и дебаг.
+
+---
+
+## 6. EMPTY SAMPLE ≠ SUSPICIOUS
+
+Если:
+- stablecoinIncomingVolume === 0
+
+то это значит:
+- нет данных для SoF
+
+Это НЕ значит:
+- suspicious = 100%
+
+Всегда:
+- показывать empty state
+- не фейкать breakdown
+
+---
+
+## 7. COUNTERPARTY = FROM_ADDRESS
+
+При построении графа:
+
+- узел = analyzed wallet
+- контрагент = from_address (для inflow)
+
+Объём:
+- volumeByCounterparty[from_address] += amount
+
+---
+
+## 8. PAGINATION ОБЯЗАТЕЛЬНА
+
+TronScan API:
+- ограничивает количество записей
+
+Всегда:
+- использовать start + limit
+- итерировать страницы
+- не доверять одной странице
+
+---
+
+## 9. CONFIRMED ONLY
+
+Для AML:
+
+- использовать только confirmed transfers
+- исключать неподтверждённые
+
+---
+
+## 10. FINAL RULE
+
+Если:
+- SoF считается не из TRC20 transfers
+
+значит:
+- AML модель работает на неправильных данных
+
+и любые дальнейшие улучшения скоринга бессмысленны.

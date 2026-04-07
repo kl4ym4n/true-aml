@@ -1,4 +1,5 @@
 import { IBlockchainClient } from '../../lib/blockchain-client.interface';
+import { env } from '../../config/env';
 import {
   TAINT_STABLECOIN_CONTRACT_ADDRESSES,
   TAINT_STABLECOIN_SYMBOLS,
@@ -38,6 +39,17 @@ export interface Transaction {
  */
 export class TransactionAnalyzer {
   constructor(private blockchainClient: IBlockchainClient) {}
+
+  /** USDT/USDC mainnet contracts for SoF (env override + defaults). */
+  private stablecoinContractAddresses(): string[] {
+    return [
+      ...new Set(
+        [env.tronUsdtContract, env.tronUsdcContract].filter(
+          (c): c is string => !!c?.trim()
+        )
+      ),
+    ];
+  }
 
   /** True if this TRC20 row is USDT/USDC by symbol or by mainnet contract address. */
   private isTaintStablecoinToken(tokenInfo?: {
@@ -136,11 +148,85 @@ export class TransactionAnalyzer {
   }
 
   /**
-   * Fetch incoming TRC20 volumes for an address: total volume and volume per sender (counterparty).
-   * Uses getTransactions (only_to) only; does not use getTRC20Transactions (not available in TronScan API).
-   * Counts only transfers that have tokenInfo (TRC20); ignores plain TRX transfers.
+   * Fetch incoming USDT/USDC (TRC20) volumes via contract-scoped transfers (TronScan:
+   * /api/token_trc20/transfers). Does not use generic /api/transaction.
    */
   async fetchTRC20IncomingVolumes(
+    address: string,
+    opts?: { debug?: boolean }
+  ): Promise<{
+    totalVolume: number;
+    volumeByCounterparty: Map<string, number>;
+    pagesFetched: number;
+    scannedTxCount: number;
+    stablecoinTxCount: number;
+    truncated: boolean;
+  }> {
+    try {
+      const contracts = this.stablecoinContractAddresses();
+      const { transfers, meta } =
+        await this.blockchainClient.getStablecoinTrc20Transfers(address, {
+          direction: 'incoming',
+          contractAddresses: contracts,
+          maxPages: 5,
+          pageSize: 200,
+          confirm: true,
+          debug: opts?.debug,
+        });
+
+      const normalizedAddress = address.toLowerCase();
+      const volumeByCounterparty = new Map<string, number>();
+      let totalVolume = 0;
+      let stablecoinTxCount = 0;
+
+      for (const t of transfers) {
+        if (t.toAddress.toLowerCase() !== normalizedAddress) continue;
+        if (t.amount <= 0) continue;
+        stablecoinTxCount++;
+        totalVolume += t.amount;
+        volumeByCounterparty.set(
+          t.fromAddress,
+          (volumeByCounterparty.get(t.fromAddress) ?? 0) + t.amount
+        );
+      }
+
+      if (opts?.debug) {
+        console.log(`[TransactionAnalyzer] Stablecoin incoming scan summary`, {
+          address,
+          source: 'token_trc20_transfers',
+          pagesFetched: meta.pagesFetched,
+          totalRowsFetched: meta.totalRowsFetched,
+          matchedIncomingTransfers: meta.matchedTransfers,
+          uniqueCounterparties: meta.uniqueCounterparties,
+          contractsSeen: meta.contractsSeen,
+          tokenSymbolsSeen: meta.tokenSymbolsSeen,
+          totalNormalizedVolume: meta.totalNormalizedVolume,
+          stablecoinIncomingTotal: totalVolume,
+          truncated: meta.truncated,
+        });
+      }
+
+      return {
+        totalVolume,
+        volumeByCounterparty,
+        pagesFetched: meta.pagesFetched,
+        scannedTxCount: meta.totalRowsFetched,
+        stablecoinTxCount,
+        truncated: meta.truncated,
+      };
+    } catch (e) {
+      console.warn(
+        '[TransactionAnalyzer] Stablecoin transfer fetch failed; falling back to tx list:',
+        e
+      );
+      return this.fetchTRC20IncomingVolumesLegacy(address, opts);
+    }
+  }
+
+  /**
+   * Legacy: scan generic tx feed for TRC20 + symbol/contract heuristics (last resort).
+   */
+  private async fetchTRC20IncomingVolumesLegacy(
     address: string,
     opts?: { debug?: boolean }
   ): Promise<{
@@ -175,7 +261,6 @@ export class TransactionAnalyzer {
           start: page * pageLimit,
         });
         const list = response.data || [];
-        console.log(list);
         if (list.length === 0) break;
         pagesFetched++;
         scannedTxCount += list.length;
@@ -194,9 +279,7 @@ export class TransactionAnalyzer {
             skippedToMismatch++;
             continue;
           }
-          // Only TRC20: count when tokenInfo is present (token transfer); skip plain TRX
           const tokenInfo = tx.tokenInfo;
-          // console.log(tokenInfo);
           if (!tokenInfo) {
             skippedNoTokenInfo++;
             continue;
@@ -226,7 +309,6 @@ export class TransactionAnalyzer {
         }
 
         if (!response.hasMore) break;
-        // Safety break for providers that ignore "start" or return duplicates.
         if (newItemsInPage === 0) break;
       }
       truncated = pagesFetched >= maxPages;
@@ -234,7 +316,7 @@ export class TransactionAnalyzer {
       // return zeros
     }
     if (opts?.debug) {
-      console.log(`[TransactionAnalyzer] Stablecoin incoming scan summary`, {
+      console.log(`[TransactionAnalyzer] Stablecoin incoming (legacy tx list)`, {
         address,
         pagesFetched,
         scannedTxCount,
@@ -260,11 +342,61 @@ export class TransactionAnalyzer {
   }
 
   /**
-   * Fetch outgoing TRC20 volumes for an address: total volume and volume per recipient (counterparty).
-   * Uses getTransactions (only_to=false) and filters rows where from == address.
-   * Counts only stablecoin transfers (USDT/USDC) that have tokenInfo.
+   * Outgoing USDT/USDC via contract-scoped transfers.
    */
   async fetchTRC20OutgoingVolumes(address: string): Promise<{
+    totalVolume: number;
+    volumeByCounterparty: Map<string, number>;
+    pagesFetched: number;
+    scannedTxCount: number;
+    stablecoinTxCount: number;
+    truncated: boolean;
+  }> {
+    try {
+      const contracts = this.stablecoinContractAddresses();
+      const { transfers, meta } =
+        await this.blockchainClient.getStablecoinTrc20Transfers(address, {
+          direction: 'outgoing',
+          contractAddresses: contracts,
+          maxPages: 5,
+          pageSize: 200,
+          confirm: true,
+        });
+
+      const normalizedAddress = address.toLowerCase();
+      const volumeByCounterparty = new Map<string, number>();
+      let totalVolume = 0;
+      let stablecoinTxCount = 0;
+
+      for (const t of transfers) {
+        if (t.fromAddress.toLowerCase() !== normalizedAddress) continue;
+        if (t.amount <= 0) continue;
+        stablecoinTxCount++;
+        totalVolume += t.amount;
+        volumeByCounterparty.set(
+          t.toAddress,
+          (volumeByCounterparty.get(t.toAddress) ?? 0) + t.amount
+        );
+      }
+
+      return {
+        totalVolume,
+        volumeByCounterparty,
+        pagesFetched: meta.pagesFetched,
+        scannedTxCount: meta.totalRowsFetched,
+        stablecoinTxCount,
+        truncated: meta.truncated,
+      };
+    } catch (e) {
+      console.warn(
+        '[TransactionAnalyzer] Stablecoin outgoing transfer fetch failed; falling back to tx list:',
+        e
+      );
+      return this.fetchTRC20OutgoingVolumesLegacy(address);
+    }
+  }
+
+  private async fetchTRC20OutgoingVolumesLegacy(address: string): Promise<{
     totalVolume: number;
     volumeByCounterparty: Map<string, number>;
     pagesFetched: number;

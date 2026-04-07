@@ -14,7 +14,58 @@ import {
   TronScanTransactionsOptions,
   TronScanContractInfo,
   TronScanContractEventsResponse,
+  NormalizedTronScanTRC20Transfer,
+  TronScanTokenTrc20TransfersResponse,
+  TronScanTokenTrc20TransferRaw,
 } from './tronscan.types';
+
+/** Map TronScan token_trc20/transfers row to normalized transfer (AML / SoF). */
+export function normalizeTronScanTrc20TransferRow(
+  row: TronScanTokenTrc20TransferRaw,
+  contractInfo?: TronScanTokenTrc20TransfersResponse['contractInfo']
+): NormalizedTronScanTRC20Transfer | null {
+  const txHash = String(row.transaction_id ?? '');
+  if (!txHash) return null;
+  const fromAddress = String(row.from_address ?? '');
+  const toAddress = String(row.to_address ?? '');
+  const contractAddress = String(row.contract_address ?? '');
+  if (!contractAddress) return null;
+
+  const ti = row.token_info;
+  const meta = contractInfo?.[contractAddress];
+  const tokenSymbol = String(
+    ti?.tokenAbbr ?? ti?.symbol ?? meta?.tag1 ?? ''
+  ).trim();
+  const tokenName = String(ti?.tokenName ?? ti?.name ?? meta?.name ?? '').trim();
+  let tokenDecimals = Number(
+    ti?.tokenDecimal ?? ti?.decimals ?? 6
+  );
+  if (!Number.isFinite(tokenDecimals) || tokenDecimals < 0 || tokenDecimals > 30) {
+    tokenDecimals = 6;
+  }
+
+  const quant = String(row.quant ?? '0');
+  const rawInt = parseFloat(quant);
+  if (!Number.isFinite(rawInt)) return null;
+  const amount = rawInt / Math.pow(10, tokenDecimals);
+
+  const blockTs = Number(row.block_ts ?? 0);
+  const timestamp = Number.isFinite(blockTs) ? blockTs : 0;
+
+  return {
+    txHash,
+    timestamp,
+    fromAddress,
+    toAddress,
+    contractAddress,
+    tokenSymbol,
+    tokenName,
+    tokenDecimals,
+    rawAmount: quant,
+    amount,
+    confirmed: row.confirmed !== false,
+  };
+}
 
 // TronScan API base URL
 const TRONSCAN_BASE_URL = 'https://apilist.tronscanapi.com';
@@ -340,42 +391,132 @@ export class TronScanClient {
   }
 
   /**
-   * Get TRC-20 token transactions for an address
-   * @param address - TRON address
-   * @param options - Query options
+   * TRC-20 token transfers (correct dataset for USDT/USDC inflow), not /api/transaction.
+   * GET /api/token_trc20/transfers
+   */
+  async getTRC20TransfersByAddress(
+    address: string,
+    options?: {
+      contractAddress?: string;
+      onlyIncoming?: boolean;
+      onlyOutgoing?: boolean;
+      start?: number;
+      limit?: number;
+      start_timestamp?: number;
+      end_timestamp?: number;
+      confirm?: boolean;
+    }
+  ): Promise<{
+    data: NormalizedTronScanTRC20Transfer[];
+    total: number;
+    rangeTotal: number;
+    contractInfo?: TronScanTokenTrc20TransfersResponse['contractInfo'];
+  }> {
+    const params: Record<string, string | number | boolean> = {
+      relatedAddress: address,
+      confirm: options?.confirm !== false,
+    };
+
+    if (options?.contractAddress) {
+      params.contract_address = options.contractAddress;
+    }
+    if (options?.onlyIncoming) {
+      params.toAddress = address;
+    }
+    if (options?.onlyOutgoing) {
+      params.fromAddress = address;
+    }
+    if (options?.start !== undefined) {
+      params.start = options.start;
+    }
+    if (options?.limit !== undefined) {
+      params.limit = options.limit;
+    }
+    if (options?.start_timestamp !== undefined) {
+      params.start_timestamp = options.start_timestamp;
+    }
+    if (options?.end_timestamp !== undefined) {
+      params.end_timestamp = options.end_timestamp;
+    }
+
+    return this.retryRequest(async () => {
+      const response =
+        await this.axiosInstance.get<TronScanTokenTrc20TransfersResponse>(
+          '/api/token_trc20/transfers',
+          { params }
+        );
+
+      if (!response.data) {
+        throw new TronScanError('Failed to fetch TRC-20 transfers');
+      }
+
+      const payload = response.data;
+      console.log(payload);
+      const rawRows =
+        payload.token_transfers ?? payload.data ?? ([] as TronScanTokenTrc20TransferRaw[]);
+      const contractInfo = payload.contractInfo;
+      const data: NormalizedTronScanTRC20Transfer[] = [];
+      for (const row of rawRows) {
+        const n = normalizeTronScanTrc20TransferRow(row, contractInfo);
+        if (n) data.push(n);
+      }
+      const rangeTotal = payload.rangeTotal ?? payload.total ?? data.length;
+      const total = payload.total ?? rangeTotal;
+
+      return {
+        data,
+        total,
+        rangeTotal,
+        contractInfo,
+      };
+    });
+  }
+
+  /**
+   * Legacy TRC-20 list for generic tooling — backed by token_trc20/transfers (not /api/transaction/trc20).
    */
   async getTRC20Transactions(
     address: string,
     options?: TronScanTransactionsOptions
   ): Promise<TronScanTransactionsResponse> {
-    const params: Record<string, string | number | boolean> = {
+    const onlyIncoming = options?.only_to === true;
+    const onlyOutgoing = options?.only_from === true;
+
+    const { data, total, rangeTotal } = await this.getTRC20TransfersByAddress(
       address,
-      contract_address: address, // For TRC-20 transactions
-    };
-
-    if (options?.limit) {
-      params.limit = options.limit;
-    }
-    if (options?.start) {
-      params.start = options.start;
-    }
-    if (options?.sort) {
-      params.sort = options.sort;
-    }
-
-    return this.retryRequest(async () => {
-      const response =
-        await this.axiosInstance.get<TronScanTransactionsResponse>(
-          '/api/transaction/trc20',
-          { params }
-        );
-
-      if (!response.data) {
-        throw new TronScanError('Failed to fetch TRC-20 transactions');
+      {
+        limit: options?.limit ?? 200,
+        start: options?.start ?? 0,
+        confirm: true,
+        onlyIncoming: onlyIncoming && !onlyOutgoing,
+        onlyOutgoing: onlyOutgoing && !onlyIncoming,
+        start_timestamp: options?.start_timestamp,
+        end_timestamp: options?.end_timestamp,
       }
+    );
 
-      return response.data;
-    });
+    const mapped = data.map(tx => ({
+      hash: tx.txHash,
+      block: 0,
+      timestamp: tx.timestamp,
+      ownerAddress: tx.fromAddress,
+      toAddress: tx.toAddress,
+      amount: tx.rawAmount,
+      tokenInfo: {
+        symbol: tx.tokenSymbol,
+        address: tx.contractAddress,
+        decimals: tx.tokenDecimals,
+        name: tx.tokenName,
+      },
+      contractType: 'trc20',
+      confirmed: tx.confirmed,
+    }));
+
+    return {
+      total,
+      rangeTotal: rangeTotal ?? total,
+      data: mapped,
+    };
   }
 
   /**
