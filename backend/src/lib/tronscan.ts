@@ -36,11 +36,15 @@ export function normalizeTronScanTrc20TransferRow(
   const tokenSymbol = String(
     ti?.tokenAbbr ?? ti?.symbol ?? meta?.tag1 ?? ''
   ).trim();
-  const tokenName = String(ti?.tokenName ?? ti?.name ?? meta?.name ?? '').trim();
-  let tokenDecimals = Number(
-    ti?.tokenDecimal ?? ti?.decimals ?? 6
-  );
-  if (!Number.isFinite(tokenDecimals) || tokenDecimals < 0 || tokenDecimals > 30) {
+  const tokenName = String(
+    ti?.tokenName ?? ti?.name ?? meta?.name ?? ''
+  ).trim();
+  let tokenDecimals = Number(ti?.tokenDecimal ?? ti?.decimals ?? 6);
+  if (
+    !Number.isFinite(tokenDecimals) ||
+    tokenDecimals < 0 ||
+    tokenDecimals > 30
+  ) {
     tokenDecimals = 6;
   }
 
@@ -451,9 +455,10 @@ export class TronScanClient {
       }
 
       const payload = response.data;
-      console.log(payload);
       const rawRows =
-        payload.token_transfers ?? payload.data ?? ([] as TronScanTokenTrc20TransferRaw[]);
+        payload.token_transfers ??
+        payload.data ??
+        ([] as TronScanTokenTrc20TransferRaw[]);
       const contractInfo = payload.contractInfo;
       const data: NormalizedTronScanTRC20Transfer[] = [];
       for (const row of rawRows) {
