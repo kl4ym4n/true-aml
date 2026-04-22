@@ -228,14 +228,17 @@ export class ExpansionService {
             derivedFrom: nextDerivedFrom,
           },
         });
-        if (env.crawler.enabled && env.crawler.enqueueFromExpansion) {
-          crawlerExpansionAddresses.push(address);
-        }
         return 1;
       });
 
       const counts = await Promise.all(ops);
       derivedUpserted += counts.reduce<number>((a, b) => a + b, 0);
+
+      if (env.crawler.enabled && env.crawler.enqueueFromExpansion) {
+        for (const { address } of entries) {
+          crawlerExpansionAddresses.push(address);
+        }
+      }
 
       expandedRoots++;
       this.expansionCache.set(root.address, { expandedAt: Date.now() });
