@@ -20,6 +20,22 @@ export async function loadKnownPlatforms(): Promise<{
   let upserted = 0;
   let skipped = 0;
 
+  // Batch-load all existing addresses to avoid N+1 queries
+  const allAddresses = platforms
+    .flatMap(p => [
+      ...p.contractAddresses,
+      ...p.hotWalletAddresses,
+    ])
+    .filter(Boolean);
+
+  const existingRecords = await prisma.blacklistedAddress.findMany({
+    where: { address: { in: allAddresses } },
+    select: { address: true, isDerived: true },
+  });
+  const existingByAddress = new Map(
+    existingRecords.map(r => [r.address, r])
+  );
+
   for (const platform of platforms) {
     const addresses = [
       ...platform.contractAddresses,
@@ -29,10 +45,7 @@ export async function loadKnownPlatforms(): Promise<{
     for (const address of addresses) {
       if (!address) continue;
 
-      const existing = await prisma.blacklistedAddress.findUnique({
-        where: { address },
-        select: { isDerived: true },
-      });
+      const existing = existingByAddress.get(address);
 
       // Never overwrite a stronger non-derived record
       if (existing && !existing.isDerived) {
