@@ -7,7 +7,14 @@
  *
  * Run: npm run seed:platforms
  */
+import dotenv from 'dotenv';
+import path from 'node:path';
 import prisma from '../config/database';
+
+dotenv.config();
+if (!process.env.DATABASE_URL) {
+  dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+}
 
 const platforms = [
   // ── GAMBLING ──────────────────────────────────────────────────────────
@@ -133,7 +140,8 @@ async function main(): Promise<void> {
   await prisma.$disconnect();
 }
 
-main().catch(err => {
+main().catch(async err => {
   console.error(err);
+  await prisma.$disconnect();
   process.exit(1);
 });
