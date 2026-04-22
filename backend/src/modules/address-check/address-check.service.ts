@@ -843,8 +843,8 @@ export class AddressCheckService {
       hopEntityFlags.push(row.result.flags);
       const exchangeLike = isExchangeLikeCounterparty({
         flags: row.result.flags,
-        blacklistCategory: row.result.metadata.blacklistCategory ?? null,
-        isMetadataBlacklisted: !!row.result.metadata.isBlacklisted,
+        blacklistCategory: row.result.metadata?.blacklistCategory ?? null,
+        isMetadataBlacklisted: !!row.result.metadata?.isBlacklisted,
         txCount: row.onchainSnapshot.txCount,
         uniqueCounterpartyCount: row.onchainSnapshot.uniqueCounterpartyCount,
         maxIncomingSenderShare: row.onchainSnapshot.maxCounterpartyShare,
@@ -1074,6 +1074,8 @@ export class AddressCheckService {
             entity: entityT,
             flags: [],
             entityRiskWeight: rwT,
+            isMetadataBlacklisted: secT != null,
+            blacklistCategory: secT?.category ?? null,
           })
         ) {
           riskyIncomingVolume += tVol;
