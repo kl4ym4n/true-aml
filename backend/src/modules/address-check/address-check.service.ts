@@ -1076,7 +1076,7 @@ export class AddressCheckService {
             entityRiskWeight: rwT,
           })
         ) {
-          riskyIncomingVolume += pathShare * totalVolume;
+          riskyIncomingVolume += tVol;
         }
       }
     }

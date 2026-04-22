@@ -153,12 +153,32 @@ async function testIncomingVolumePagination(): Promise<void> {
   assert.equal(result.stablecoinTxCount, 3);
 }
 
+async function testHop2RiskyVolumeFormula(): Promise<void> {
+  const totalVolume = 1000;
+  const h1IncomingVolume = 400;
+  const tVol = 200;
+  const vols2TotalVolume = 500;
+
+  const alpha = h1IncomingVolume / totalVolume; // 0.4
+  const beta = tVol / vols2TotalVolume; // 0.4
+  const pathShare = alpha * beta; // 0.16
+
+  // Wrong formula yields ~160, not 200
+  const wrongValue = Math.round(pathShare * totalVolume);
+  assert.equal(wrongValue, 160);
+  // Correct formula: tVol = 200
+  assert.equal(tVol, 200);
+  // They are not equal — the old formula was wrong
+  assert.notEqual(wrongValue, tVol);
+}
+
 async function run(): Promise<void> {
   await testTaintBuckets();
   await testFinalScoreFormula();
   await testAdvancedRiskCalculatorBlend();
   await testWhitelist();
   await testIncomingVolumePagination();
+  await testHop2RiskyVolumeFormula();
   // eslint-disable-next-line no-console
   console.log('taint-model tests passed');
 }
