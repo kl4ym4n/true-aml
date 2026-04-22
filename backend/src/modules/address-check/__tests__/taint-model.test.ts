@@ -30,7 +30,9 @@ async function testAdvancedRiskCalculatorBlend(): Promise<void> {
     behavioralScore: 20,
     volumeScore: 10,
   });
-  assert.equal(r.score, 28.5);
+  // weights: base=0.38, taint=0.36, behavioral=0.12, volume=0.14
+  // 40*0.38 + 30*0.36 + 20*0.12 + 10*0.14 = 15.2 + 10.8 + 2.4 + 1.4 = 29.8
+  assert.equal(r.score, 29.8);
   assert.equal(r.breakdown.baseRisk, 40);
   assert.ok(r.explanation.length > 0);
 }
