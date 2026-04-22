@@ -15,11 +15,11 @@ const createApp = (): Express => {
   // CORS middleware
   app.use((req, res, next) => {
     const origin = req.headers.origin as string | undefined;
-    const allowed =
-      env.allowedOrigins.length === 0 ||
-      (origin != null && env.allowedOrigins.includes(origin));
 
-    if (allowed && origin) {
+    if (env.allowedOrigins.length === 0) {
+      // Dev mode: allow all origins
+      res.header('Access-Control-Allow-Origin', origin ?? '*');
+    } else if (origin != null && env.allowedOrigins.includes(origin)) {
       res.header('Access-Control-Allow-Origin', origin);
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');

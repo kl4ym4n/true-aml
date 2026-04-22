@@ -1050,6 +1050,7 @@ export class AddressCheckService {
         const beta = tVol / vols2.totalVolume;
         const pathShare = alpha * beta;
         const secT = await this.getAddressSecurityCached(tAddr);
+        const blT = await blacklistService.getBlacklistEntry(tAddr);
         const txsT =
           await this.transactionAnalyzer.fetchAddressTransactions(tAddr);
         const decayT = Math.exp(
@@ -1074,8 +1075,8 @@ export class AddressCheckService {
             entity: entityT,
             flags: [],
             entityRiskWeight: rwT,
-            isMetadataBlacklisted: secT?.isBlacklisted ?? false,
-            blacklistCategory: null,
+            isMetadataBlacklisted: secT?.isBlacklisted ?? blT != null,
+            blacklistCategory: blT?.category ?? null,
           })
         ) {
           riskyIncomingVolume += tVol;
@@ -1134,6 +1135,7 @@ export class AddressCheckService {
                 entity: entityU,
                 flags: [],
                 entityRiskWeight: rwU,
+                isMetadataBlacklisted: secU?.isBlacklisted ?? false,
               })
             ) {
               riskyIncomingVolume += uVol;
