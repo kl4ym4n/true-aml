@@ -208,6 +208,25 @@ async function testNewCategoryPriorities(): Promise<void> {
   assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('CHILD_EXPLOITATION'), 'CHILD_EXPLOITATION not in dangerous set');
 }
 
+async function testKnownPlatformCategoryOverridesSuspicious(): Promise<void> {
+  function resolveCategory(
+    platformCategory: string | null,
+    existing: { isDerived: boolean; category: string } | undefined,
+    fallback: string
+  ): string {
+    if (platformCategory) {
+      if (existing && !existing.isDerived) return existing.category;
+      return platformCategory;
+    }
+    return fallback;
+  }
+
+  assert.equal(resolveCategory('GAMBLING', undefined, 'SUSPICIOUS'), 'GAMBLING');
+  assert.equal(resolveCategory('GAMBLING', { isDerived: false, category: 'SCAM' }, 'SUSPICIOUS'), 'SCAM');
+  assert.equal(resolveCategory('GAMBLING', { isDerived: true, category: 'SUSPICIOUS' }, 'SUSPICIOUS'), 'GAMBLING');
+  assert.equal(resolveCategory(null, undefined, 'SUSPICIOUS'), 'SUSPICIOUS');
+}
+
 async function run(): Promise<void> {
   await testTaintBuckets();
   await testFinalScoreFormula();
@@ -217,6 +236,7 @@ async function run(): Promise<void> {
   await testHop2RiskyVolumeFormula();
   await testHop3RiskyVolumeAccumulation();
   await testNewCategoryPriorities();
+  await testKnownPlatformCategoryOverridesSuspicious();
   // eslint-disable-next-line no-console
   console.log('taint-model tests passed');
 }

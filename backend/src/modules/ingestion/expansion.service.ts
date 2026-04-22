@@ -13,6 +13,7 @@ import {
   computeDerivedExpansionConfidence,
   mergeCategoryForExpansion,
 } from './ingestion.utils';
+import { getKnownPlatformCategory } from './known-platforms.cache';
 import {
   derivedProvenanceEntry,
   mergeSourceProvenance,
@@ -167,7 +168,12 @@ export class ExpansionService {
           depth: COUNTERPARTY_HOP_DEPTH,
         });
 
-        const nextCategory = mergeCategoryForExpansion({ existing });
+        const platformCategory = getKnownPlatformCategory(address);
+        const nextCategory = platformCategory
+          ? (existing && !existing.isDerived
+              ? existing.category
+              : platformCategory)
+          : mergeCategoryForExpansion({ existing });
         const nextConfidence = existing
           ? Math.max(existing.confidence ?? 0, derivedConfidence)
           : derivedConfidence;
