@@ -1,19 +1,28 @@
 import express, { Express } from 'express';
+import helmet from 'helmet';
 import healthRoutes from './modules/health/health.routes';
 import checkRoutes from './modules/check/check.routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { apiRateLimiter } from './middleware/rateLimiter';
+import { env } from './config/env';
 
 const createApp = (): Express => {
   const app = express();
 
+  // Security headers
+  app.use(helmet());
+
   // CORS middleware
   app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header(
-      'Access-Control-Allow-Methods',
-      'GET, POST, PUT, DELETE, OPTIONS'
-    );
+    const origin = req.headers.origin as string | undefined;
+    const allowed =
+      env.allowedOrigins.length === 0 ||
+      (origin != null && env.allowedOrigins.includes(origin));
+
+    if (allowed && origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+    }
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header(
       'Access-Control-Allow-Headers',
       'Origin, X-Requested-With, Content-Type, Accept, x-api-key'
@@ -26,8 +35,8 @@ const createApp = (): Express => {
   });
 
   // Middleware
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
   // Global rate limiting
   app.use('/api', apiRateLimiter);

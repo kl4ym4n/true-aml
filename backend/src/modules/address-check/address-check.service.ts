@@ -1074,8 +1074,8 @@ export class AddressCheckService {
             entity: entityT,
             flags: [],
             entityRiskWeight: rwT,
-            isMetadataBlacklisted: secT != null,
-            blacklistCategory: secT?.category ?? null,
+            isMetadataBlacklisted: secT?.isBlacklisted ?? false,
+            blacklistCategory: null,
           })
         ) {
           riskyIncomingVolume += tVol;

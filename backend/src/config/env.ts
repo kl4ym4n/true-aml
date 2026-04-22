@@ -25,6 +25,7 @@ interface EnvConfig {
   trongridApiKey: string;
   tronscanApiKey?: string;
   apiKey: string;
+  allowedOrigins: string[];
   blockchainProvider?: 'trongrid' | 'tronscan' | 'auto';
   /** Mainnet USDT TRC20 (SoF / taint stablecoin sample). */
   tronUsdtContract: string;
@@ -75,6 +76,10 @@ function validateEnv(): EnvConfig {
   const trongridApiKey = process.env.TRONGRID_API_KEY;
   const tronscanApiKey = process.env.TRONSCAN_API_KEY;
   const apiKey = process.env.API_KEY || '';
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
   const ingestionEnabled = (process.env.INGESTION_ENABLED || 'true') === 'true';
   const ofacCsvPath = process.env.OFAC_CSV_PATH;
   const ofacSdnZipPath = process.env.OFAC_SDN_ZIP_PATH?.trim();
@@ -180,6 +185,7 @@ function validateEnv(): EnvConfig {
     trongridApiKey,
     tronscanApiKey,
     apiKey,
+    allowedOrigins,
     blockchainProvider,
     tronUsdtContract,
     tronUsdcContract,

@@ -18,9 +18,9 @@ export const apiKeyAuth = (
     return;
   }
 
-  if (!env.apiKey || env.apiKey === '') {
-    // If no API key is configured, allow all requests (development mode)
-    return next();
+  if (!env.apiKey) {
+    next(new UnauthorizedError('Server misconfiguration: API_KEY not set'));
+    return;
   }
 
   if (apiKey !== env.apiKey) {
