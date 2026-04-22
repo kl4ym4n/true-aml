@@ -11,6 +11,10 @@ export const DANGEROUS_BLACKLIST_CATEGORIES = new Set<BlacklistCategory>([
   'SCAM',
   'PHISHING',
   'MIXER',
+  'GAMBLING',
+  'HIGH_RISK_EXCHANGE',
+  'TERRORIST_FINANCING',
+  'CHILD_EXPLOITATION',
 ]);
 
 export type TrustedSourceReason =

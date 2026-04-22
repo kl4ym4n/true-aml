@@ -186,6 +186,25 @@ async function testHop3RiskyVolumeAccumulation(): Promise<void> {
   assert.equal(riskyIncomingVolume, 150);
 }
 
+async function testNewCategoryPriorities(): Promise<void> {
+  const { CATEGORY_PRIORITY } = await import('../../ingestion/ingestion.utils');
+  // All new categories must exist
+  assert.ok(CATEGORY_PRIORITY['GAMBLING'] !== undefined, 'GAMBLING missing');
+  assert.ok(CATEGORY_PRIORITY['HIGH_RISK_EXCHANGE'] !== undefined, 'HIGH_RISK_EXCHANGE missing');
+  assert.ok(CATEGORY_PRIORITY['TERRORIST_FINANCING'] !== undefined, 'TERRORIST_FINANCING missing');
+  assert.ok(CATEGORY_PRIORITY['CHILD_EXPLOITATION'] !== undefined, 'CHILD_EXPLOITATION missing');
+  // Ordering: GAMBLING and HIGH_RISK_EXCHANGE must be above SUSPICIOUS (40)
+  assert.ok(CATEGORY_PRIORITY['GAMBLING'] > CATEGORY_PRIORITY['SUSPICIOUS'], 'GAMBLING must outrank SUSPICIOUS');
+  assert.ok(CATEGORY_PRIORITY['HIGH_RISK_EXCHANGE'] > CATEGORY_PRIORITY['SUSPICIOUS'], 'HIGH_RISK_EXCHANGE must outrank SUSPICIOUS');
+  assert.ok(CATEGORY_PRIORITY['SCAM'] > CATEGORY_PRIORITY['GAMBLING'], 'SCAM must outrank GAMBLING');
+  // Dangerous set must include new categories
+  const { DANGEROUS_BLACKLIST_CATEGORIES } = await import('../address-check.utils/trusted-source-semantics');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('GAMBLING'), 'GAMBLING not in dangerous set');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('HIGH_RISK_EXCHANGE'), 'HIGH_RISK_EXCHANGE not in dangerous set');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('TERRORIST_FINANCING'), 'TERRORIST_FINANCING not in dangerous set');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('CHILD_EXPLOITATION'), 'CHILD_EXPLOITATION not in dangerous set');
+}
+
 async function run(): Promise<void> {
   await testTaintBuckets();
   await testFinalScoreFormula();
@@ -194,6 +213,7 @@ async function run(): Promise<void> {
   await testIncomingVolumePagination();
   await testHop2RiskyVolumeFormula();
   await testHop3RiskyVolumeAccumulation();
+  await testNewCategoryPriorities();
   // eslint-disable-next-line no-console
   console.log('taint-model tests passed');
 }

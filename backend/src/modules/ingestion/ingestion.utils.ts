@@ -11,17 +11,17 @@ import { clamp01, type AddressRecord } from './ingestion.types';
  */
 export const CATEGORY_PRIORITY: Record<BlacklistCategory, number> = {
   SANCTION: 100,
-  TERRORIST_FINANCING: 98,
-  CHILD_EXPLOITATION: 98,
   STOLEN_FUNDS: 95,
   RANSOM: 95,
   DARK_MARKET: 90,
   SCAM: 85,
+  TERRORIST_FINANCING: 83,
+  CHILD_EXPLOITATION: 82,
   PHISHING: 80,
   MIXER: 80,
-  HIGH_RISK_EXCHANGE: 60,
+  GAMBLING: 60,
+  HIGH_RISK_EXCHANGE: 55,
   SUSPICIOUS: 40,
-  GAMBLING: 35,
   EXCHANGE: 10,
 };
 
@@ -46,6 +46,7 @@ export function entityTypeHintFromCategory(
   category: BlacklistCategory
 ): EntityType | null {
   if (category === 'EXCHANGE') return 'exchange';
+  if (category === 'HIGH_RISK_EXCHANGE') return 'exchange';
   if (category === 'MIXER') return 'mixer';
   return null;
 }
