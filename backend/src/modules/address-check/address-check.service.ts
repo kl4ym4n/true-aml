@@ -1126,6 +1126,16 @@ export class AddressCheckService {
             taintHints.push(
               `${(pathShare * 100).toFixed(3)}% path via ${entityU} (hop 3)`
             );
+            if (
+              isAmlRiskyCounterparty({
+                address: uAddr,
+                entity: entityU,
+                flags: [],
+                entityRiskWeight: rwU,
+              })
+            ) {
+              riskyIncomingVolume += uVol;
+            }
           }
         }
       }

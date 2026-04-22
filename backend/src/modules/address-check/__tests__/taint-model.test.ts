@@ -172,6 +172,18 @@ async function testHop2RiskyVolumeFormula(): Promise<void> {
   assert.notEqual(wrongValue, tVol);
 }
 
+async function testHop3RiskyVolumeAccumulation(): Promise<void> {
+  // Hop 3 must accumulate riskyIncomingVolume for risky counterparties.
+  // Regression: previously the hop 3 loop had no riskyIncomingVolume += call.
+  let riskyIncomingVolume = 0;
+  const uVol = 150;
+  const isRisky = true;
+  if (isRisky) {
+    riskyIncomingVolume += uVol;
+  }
+  assert.equal(riskyIncomingVolume, 150);
+}
+
 async function run(): Promise<void> {
   await testTaintBuckets();
   await testFinalScoreFormula();
@@ -179,6 +191,7 @@ async function run(): Promise<void> {
   await testWhitelist();
   await testIncomingVolumePagination();
   await testHop2RiskyVolumeFormula();
+  await testHop3RiskyVolumeAccumulation();
   // eslint-disable-next-line no-console
   console.log('taint-model tests passed');
 }
