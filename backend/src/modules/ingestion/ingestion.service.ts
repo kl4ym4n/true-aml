@@ -27,6 +27,7 @@ import {
 } from './ofac-enhanced-xml';
 import { byteProgressTransform, ingestLog, ingestWarn } from './ingestion.log';
 import { GraphCrawlerService } from './graph-crawler.service';
+import { loadKnownPlatforms } from './known-platforms.loader';
 
 const { parse } = requireFromProjectRoot(
   'csv-parse'
@@ -134,6 +135,13 @@ export class IngestionService {
       githubSources: input.githubSources.length,
       chainabuse: Boolean(input.chainabuseApiKey),
     });
+
+    ingestLog('Step: KnownPlatforms');
+    const kp = await loadKnownPlatforms();
+    sources[kp.source] = { upserted: kp.upserted, skipped: kp.skipped };
+    upserted += kp.upserted;
+    skipped += kp.skipped;
+    ingestLog('Step done: KnownPlatforms', { upserted: kp.upserted, skipped: kp.skipped });
 
     if (input.ofacCsvPath) {
       ingestLog('Step: OFAC CSV file', { path: input.ofacCsvPath });
