@@ -13,13 +13,17 @@ import {
   computeDerivedExpansionConfidence,
   mergeCategoryForExpansion,
 } from './ingestion.utils';
-import { getKnownPlatformCategory } from './known-platforms.cache';
+import {
+  getKnownPlatformCategory,
+  knownPlatformCacheSize,
+} from './known-platforms.cache';
 import {
   derivedProvenanceEntry,
   mergeSourceProvenance,
   provenanceEntriesFromJson,
   sourcesSummary,
 } from './source-provenance';
+import { ingestLog } from './ingestion.log';
 
 /** First hop from a non-derived expansion root. */
 const COUNTERPARTY_HOP_DEPTH = 1;
@@ -54,6 +58,9 @@ export class ExpansionService {
     concurrency?: number;
     reexpandTtlMs?: number;
   }): Promise<ExpansionRunResult> {
+    if (knownPlatformCacheSize() === 0) {
+      ingestLog('[Expansion] KnownPlatform cache is empty — run ingestAll first');
+    }
     const rootBatchSize = input?.rootBatchSize ?? 200;
     const topK = input?.topK ?? 20;
     const minVolume = input?.minVolume ?? 50;
