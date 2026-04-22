@@ -21,6 +21,10 @@ enum BlacklistCategory {
   EXCHANGE
   PHISHING
   SUSPICIOUS
+  GAMBLING
+  HIGH_RISK_EXCHANGE
+  TERRORIST_FINANCING
+  CHILD_EXPLOITATION
 }
 
 enum EntityType {
@@ -184,4 +188,22 @@ model TransactionCheck {
   @@map("transaction_checks")
 }
 
+/// Known risky platforms (gambling, high-risk exchanges, etc.) — manually curated master data.
+model KnownPlatform {
+  id                 String            @id @default(cuid())
+  name               String
+  category           BlacklistCategory
+  chain              String            @default("TRON")
+  contractAddresses  String[]
+  hotWalletAddresses String[]
+  confidence         Float             @default(0.9)
+  source             String            @default("manual")
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
+  @@unique([name, chain])
+  @@index([category])
+  @@index([chain])
+  @@map("known_platforms")
+}

@@ -11,13 +11,17 @@ import { clamp01, type AddressRecord } from './ingestion.types';
  */
 export const CATEGORY_PRIORITY: Record<BlacklistCategory, number> = {
   SANCTION: 100,
+  TERRORIST_FINANCING: 98,
+  CHILD_EXPLOITATION: 98,
   STOLEN_FUNDS: 95,
   RANSOM: 95,
   DARK_MARKET: 90,
   SCAM: 85,
   PHISHING: 80,
   MIXER: 80,
+  HIGH_RISK_EXCHANGE: 60,
   SUSPICIOUS: 40,
+  GAMBLING: 35,
   EXCHANGE: 10,
 };
 
