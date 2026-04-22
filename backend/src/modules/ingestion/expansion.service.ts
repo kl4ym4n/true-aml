@@ -169,11 +169,7 @@ export class ExpansionService {
         });
 
         const platformCategory = getKnownPlatformCategory(address);
-        const nextCategory = platformCategory
-          ? (existing && !existing.isDerived
-              ? existing.category
-              : platformCategory)
-          : mergeCategoryForExpansion({ existing });
+        const nextCategory = platformCategory ?? mergeCategoryForExpansion({ existing });
         const nextConfidence = existing
           ? Math.max(existing.confidence ?? 0, derivedConfidence)
           : derivedConfidence;
