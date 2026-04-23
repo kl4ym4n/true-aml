@@ -15,8 +15,12 @@ export const CATEGORY_PRIORITY: Record<BlacklistCategory, number> = {
   RANSOM: 95,
   DARK_MARKET: 90,
   SCAM: 85,
+  TERRORIST_FINANCING: 83,
+  CHILD_EXPLOITATION: 82,
   PHISHING: 80,
   MIXER: 80,
+  GAMBLING: 60,
+  HIGH_RISK_EXCHANGE: 55,
   SUSPICIOUS: 40,
   EXCHANGE: 10,
 };
@@ -42,6 +46,7 @@ export function entityTypeHintFromCategory(
   category: BlacklistCategory
 ): EntityType | null {
   if (category === 'EXCHANGE') return 'exchange';
+  if (category === 'HIGH_RISK_EXCHANGE') return 'exchange';
   if (category === 'MIXER') return 'mixer';
   return null;
 }

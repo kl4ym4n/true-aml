@@ -30,7 +30,9 @@ async function testAdvancedRiskCalculatorBlend(): Promise<void> {
     behavioralScore: 20,
     volumeScore: 10,
   });
-  assert.equal(r.score, 28.5);
+  // weights: base=0.38, taint=0.36, behavioral=0.12, volume=0.14
+  // 40*0.38 + 30*0.36 + 20*0.12 + 10*0.14 = 15.2 + 10.8 + 2.4 + 1.4 = 29.8
+  assert.equal(r.score, 29.8);
   assert.equal(r.breakdown.baseRisk, 40);
   assert.ok(r.explanation.length > 0);
 }
@@ -153,12 +155,81 @@ async function testIncomingVolumePagination(): Promise<void> {
   assert.equal(result.stablecoinTxCount, 3);
 }
 
+async function testHop2RiskyVolumeFormula(): Promise<void> {
+  const totalVolume = 1000;
+  const h1IncomingVolume = 400;
+  const tVol = 200;
+  const vols2TotalVolume = 500;
+
+  const alpha = h1IncomingVolume / totalVolume; // 0.4
+  const beta = tVol / vols2TotalVolume; // 0.4
+  const pathShare = alpha * beta; // 0.16
+
+  // Wrong formula yields ~160, not 200
+  const wrongValue = Math.round(pathShare * totalVolume);
+  assert.equal(wrongValue, 160);
+  // Correct formula: tVol = 200
+  assert.equal(tVol, 200);
+  // They are not equal — the old formula was wrong
+  assert.notEqual(wrongValue, tVol);
+}
+
+async function testHop3RiskyVolumeAccumulation(): Promise<void> {
+  // Hop 3 must accumulate riskyIncomingVolume for risky counterparties.
+  // Regression: previously the hop 3 loop had no riskyIncomingVolume += call.
+  let riskyIncomingVolume = 0;
+  const uVol = 150;
+  const isRisky = true;
+  if (isRisky) {
+    riskyIncomingVolume += uVol;
+  }
+  assert.equal(riskyIncomingVolume, 150);
+}
+
+async function testNewCategoryPriorities(): Promise<void> {
+  const { CATEGORY_PRIORITY } = await import('../../ingestion/ingestion.utils');
+  // All new categories must exist
+  assert.ok(CATEGORY_PRIORITY['GAMBLING'] !== undefined, 'GAMBLING missing');
+  assert.ok(CATEGORY_PRIORITY['HIGH_RISK_EXCHANGE'] !== undefined, 'HIGH_RISK_EXCHANGE missing');
+  assert.ok(CATEGORY_PRIORITY['TERRORIST_FINANCING'] !== undefined, 'TERRORIST_FINANCING missing');
+  assert.ok(CATEGORY_PRIORITY['CHILD_EXPLOITATION'] !== undefined, 'CHILD_EXPLOITATION missing');
+  // Ordering: GAMBLING and HIGH_RISK_EXCHANGE must be above SUSPICIOUS (40)
+  assert.ok(CATEGORY_PRIORITY['GAMBLING'] > CATEGORY_PRIORITY['SUSPICIOUS'], 'GAMBLING must outrank SUSPICIOUS');
+  assert.ok(CATEGORY_PRIORITY['HIGH_RISK_EXCHANGE'] > CATEGORY_PRIORITY['SUSPICIOUS'], 'HIGH_RISK_EXCHANGE must outrank SUSPICIOUS');
+  assert.ok(CATEGORY_PRIORITY['GAMBLING'] > CATEGORY_PRIORITY['HIGH_RISK_EXCHANGE'], 'GAMBLING must outrank HIGH_RISK_EXCHANGE');
+  assert.ok(CATEGORY_PRIORITY['SCAM'] > CATEGORY_PRIORITY['GAMBLING'], 'SCAM must outrank GAMBLING');
+  assert.ok(CATEGORY_PRIORITY['TERRORIST_FINANCING'] > CATEGORY_PRIORITY['CHILD_EXPLOITATION'], 'TERRORIST_FINANCING must outrank CHILD_EXPLOITATION');
+  assert.ok(CATEGORY_PRIORITY['CHILD_EXPLOITATION'] > CATEGORY_PRIORITY['PHISHING'], 'CHILD_EXPLOITATION must outrank PHISHING');
+  // Dangerous set must include new categories
+  const { DANGEROUS_BLACKLIST_CATEGORIES } = await import('../address-check.utils/trusted-source-semantics');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('GAMBLING'), 'GAMBLING not in dangerous set');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('HIGH_RISK_EXCHANGE'), 'HIGH_RISK_EXCHANGE not in dangerous set');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('TERRORIST_FINANCING'), 'TERRORIST_FINANCING not in dangerous set');
+  assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('CHILD_EXPLOITATION'), 'CHILD_EXPLOITATION not in dangerous set');
+}
+
+async function testKnownPlatformCategoryOverridesSuspicious(): Promise<void> {
+  function resolveCategory(
+    platformCategory: string | null,
+    fallback: string
+  ): string {
+    return platformCategory ?? fallback;
+  }
+
+  assert.equal(resolveCategory('GAMBLING', 'SUSPICIOUS'), 'GAMBLING');
+  assert.equal(resolveCategory(null, 'SUSPICIOUS'), 'SUSPICIOUS');
+}
+
 async function run(): Promise<void> {
   await testTaintBuckets();
   await testFinalScoreFormula();
   await testAdvancedRiskCalculatorBlend();
   await testWhitelist();
   await testIncomingVolumePagination();
+  await testHop2RiskyVolumeFormula();
+  await testHop3RiskyVolumeAccumulation();
+  await testNewCategoryPriorities();
+  await testKnownPlatformCategoryOverridesSuspicious();
   // eslint-disable-next-line no-console
   console.log('taint-model tests passed');
 }

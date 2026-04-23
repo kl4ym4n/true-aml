@@ -14,11 +14,16 @@ import {
   mergeCategoryForExpansion,
 } from './ingestion.utils';
 import {
+  getKnownPlatformCategory,
+  knownPlatformCacheSize,
+} from './known-platforms.cache';
+import {
   derivedProvenanceEntry,
   mergeSourceProvenance,
   provenanceEntriesFromJson,
   sourcesSummary,
 } from './source-provenance';
+import { ingestLog } from './ingestion.log';
 
 /** First hop from a non-derived expansion root. */
 const COUNTERPARTY_HOP_DEPTH = 1;
@@ -53,6 +58,9 @@ export class ExpansionService {
     concurrency?: number;
     reexpandTtlMs?: number;
   }): Promise<ExpansionRunResult> {
+    if (knownPlatformCacheSize() === 0) {
+      ingestLog('[Expansion] KnownPlatform cache is empty — run ingestAll first');
+    }
     const rootBatchSize = input?.rootBatchSize ?? 200;
     const topK = input?.topK ?? 20;
     const minVolume = input?.minVolume ?? 50;
@@ -167,7 +175,8 @@ export class ExpansionService {
           depth: COUNTERPARTY_HOP_DEPTH,
         });
 
-        const nextCategory = mergeCategoryForExpansion({ existing });
+        const platformCategory = getKnownPlatformCategory(address);
+        const nextCategory = platformCategory ?? mergeCategoryForExpansion({ existing });
         const nextConfidence = existing
           ? Math.max(existing.confidence ?? 0, derivedConfidence)
           : derivedConfidence;
@@ -228,14 +237,17 @@ export class ExpansionService {
             derivedFrom: nextDerivedFrom,
           },
         });
-        if (env.crawler.enabled && env.crawler.enqueueFromExpansion) {
-          crawlerExpansionAddresses.push(address);
-        }
         return 1;
       });
 
       const counts = await Promise.all(ops);
       derivedUpserted += counts.reduce<number>((a, b) => a + b, 0);
+
+      if (env.crawler.enabled && env.crawler.enqueueFromExpansion) {
+        for (const { address } of entries) {
+          crawlerExpansionAddresses.push(address);
+        }
+      }
 
       expandedRoots++;
       this.expansionCache.set(root.address, { expandedAt: Date.now() });

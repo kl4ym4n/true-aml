@@ -716,7 +716,12 @@ export class GraphCrawlerService {
       });
       candidates++;
 
-      if (counterpartyHop <= cfg.maxHop && !infra && cpWl !== 'strong') {
+      if (
+        counterpartyHop <= cfg.maxHop &&
+        !infra &&
+        cpWl !== 'strong' &&
+        e.address !== item.address
+      ) {
         await this.enqueueAddress({
           address: e.address,
           chain: item.chain,
