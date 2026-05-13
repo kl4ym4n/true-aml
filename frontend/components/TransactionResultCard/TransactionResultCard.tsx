@@ -22,11 +22,11 @@ export default function TransactionResultCard({ result }: TransactionResultCardP
   const { details } = result;
 
   return (
-    <ResultCard title="Analysis Result">
+    <ResultCard title="Результат анализа">
       <div className={styles.resultGrid}>
         {details.txHash && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Transaction Hash</span>
+            <span className={styles.label}>Хеш транзакции</span>
             <div className={styles.addressRow}>
               <code className={styles.address}>{details.txHash}</code>
               <CopyButton text={details.txHash} />
@@ -34,16 +34,16 @@ export default function TransactionResultCard({ result }: TransactionResultCardP
           </div>
         )}
         <div className={styles.resultItem}>
-          <span className={styles.label}>Risk Score</span>
+          <span className={styles.label}>Оценка риска (0–100)</span>
           <span className={styles.value}>{result.riskScore}</span>
         </div>
         <div className={styles.resultItem}>
-          <span className={styles.label}>Risk Level</span>
+          <span className={styles.label}>Уровень риска</span>
           <RiskBadge level={toUppercaseRiskLevel(result.riskLevel)} />
         </div>
         {result.flags.length > 0 && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Flags</span>
+            <span className={styles.label}>Флаги</span>
             <div className={styles.flags}>
               {result.flags.map((flag, idx) => (
                 <span key={idx} className={styles.flag}>
@@ -56,21 +56,21 @@ export default function TransactionResultCard({ result }: TransactionResultCardP
         {details.transferData && (
           <>
             <div className={styles.resultItem}>
-              <span className={styles.label}>From</span>
+              <span className={styles.label}>Отправитель</span>
               <div className={styles.addressRow}>
                 <code className={styles.address}>{details.transferData.from}</code>
                 <CopyButton text={details.transferData.from} />
               </div>
             </div>
             <div className={styles.resultItem}>
-              <span className={styles.label}>To</span>
+              <span className={styles.label}>Получатель</span>
               <div className={styles.addressRow}>
                 <code className={styles.address}>{details.transferData.to}</code>
                 <CopyButton text={details.transferData.to} />
               </div>
             </div>
             <div className={styles.resultItem}>
-              <span className={styles.label}>Amount</span>
+              <span className={styles.label}>Сумма</span>
               <span className={styles.value}>
                 {details.transferData.amount}{' '}
                 {details.transferData.tokenSymbol || 'TRC-20'}
@@ -80,28 +80,28 @@ export default function TransactionResultCard({ result }: TransactionResultCardP
         )}
         {details.tainting?.isTainted && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>1-Hop Taint</span>
+            <span className={styles.label}>Прямая связь с рисковым адресом</span>
             <span className={styles.warning}>
-              Tainted from:{' '}
-              {details.tainting.taintedFromAddress || 'Unknown'}
+              Источник:{' '}
+              {details.tainting.taintedFromAddress || 'неизвестен'}
             </span>
           </div>
         )}
         {details.sender && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Sender Risk</span>
+            <span className={styles.label}>Риск отправителя</span>
             <RiskBadge level={riskLevelFromScore(details.sender.riskScore)} />
           </div>
         )}
         {details.receiver && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Receiver Risk</span>
+            <span className={styles.label}>Риск получателя</span>
             <RiskBadge level={riskLevelFromScore(details.receiver.riskScore)} />
           </div>
         )}
         {details.timestamp && (
           <div className={styles.resultItem}>
-            <span className={styles.label}>Timestamp</span>
+            <span className={styles.label}>Время транзакции</span>
             <span className={styles.value}>
               {new Date(details.timestamp).toLocaleString()}
             </span>

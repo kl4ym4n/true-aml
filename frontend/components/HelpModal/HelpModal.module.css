@@ -1,0 +1,90 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal {
+  background: var(--background, #fff);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.closeButton {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  opacity: 0.5;
+  line-height: 1;
+  padding: 4px 8px;
+}
+
+.closeButton:hover {
+  opacity: 1;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  margin-top: 0;
+}
+
+.section {
+  margin-bottom: 20px;
+}
+
+.section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.section p,
+.section ul,
+.section ol {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.section ul,
+.section ol {
+  padding-left: 20px;
+}
+
+.section li {
+  margin-bottom: 4px;
+}
+
+.section ol li {
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
+
+.section ol li strong {
+  font-weight: 600;
+}
+
+.low { color: #16a34a; }
+.medium { color: #ca8a04; }
+.high { color: #ea580c; }
+.critical { color: #dc2626; }
