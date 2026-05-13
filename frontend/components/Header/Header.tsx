@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useApiKey } from '@/lib/useApiKey';
+import HelpModal from '@/components/HelpModal/HelpModal';
 import styles from './Header.module.css';
 
 export default function Header() {
@@ -9,6 +10,7 @@ export default function Header() {
   const [localApiKey, setLocalApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Sync local state with hook when loaded
   useEffect(() => {
@@ -44,7 +46,17 @@ export default function Header() {
     <header className={styles.header}>
       <div className={styles.headerContent}>
         <h1 className={styles.logo}>True AML</h1>
-        
+        <button
+          type="button"
+          onClick={() => setShowHelp(true)}
+          className={styles.helpButton}
+          aria-label="Справка"
+          title="Справка — как пользоваться сервисом"
+        >
+          ?
+        </button>
+        {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+
         <div className={styles.apiKeySection}>
           {!isEditing ? (
             <div className={styles.apiKeyDisplay}>
@@ -130,4 +142,3 @@ export default function Header() {
     </header>
   );
 }
-
