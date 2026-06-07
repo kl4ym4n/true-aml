@@ -61,6 +61,15 @@ export const TAINT_STABLECOIN_CONTRACT_ADDRESSES = new Set<string>([
   'TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8', // USDC
 ]);
 
+/** TronScan token_trc20/transfers page size for SoF / taint stablecoin sample. */
+export const SOF_STABLECOIN_PAGE_SIZE = 200;
+
+/** Max pages per stablecoin contract when scanning incoming/outgoing TRC-20 transfers. */
+export const SOF_STABLECOIN_MAX_PAGES = 30;
+
+/** Upper bound for SOF_STABLECOIN_MAX_PAGES env override. */
+export const SOF_STABLECOIN_MAX_PAGES_CAP = 100;
+
 // Known TRON DeFi liquidity pool addresses (smart contracts)
 // These are addresses of DEX routers and liquidity pools that are commonly used
 // Note: This list should be maintained and updated regularly

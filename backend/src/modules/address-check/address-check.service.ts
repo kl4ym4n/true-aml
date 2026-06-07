@@ -648,6 +648,10 @@ export class AddressCheckService {
     });
     stablecoinIncomingVolume = totalVolume;
     stablecoinSofWarning = warning;
+    if (truncated && !stablecoinSofWarning) {
+      stablecoinSofWarning =
+        'Выборка входящих USDT/USDC обрезана по лимиту страниц; старые крупные переводы могут не учитываться в SoF/taint.';
+    }
     stablecoinSofDataSource = provider;
     taintInput = {
       symbols: ['USDT', 'USDC'],

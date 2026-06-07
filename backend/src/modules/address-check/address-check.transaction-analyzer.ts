@@ -3,6 +3,7 @@ import { env } from '../../config/env';
 import {
   TAINT_STABLECOIN_CONTRACT_ADDRESSES,
   TAINT_STABLECOIN_SYMBOLS,
+  SOF_STABLECOIN_PAGE_SIZE,
 } from './address-check.constants';
 
 /**
@@ -39,6 +40,14 @@ export interface Transaction {
  */
 export class TransactionAnalyzer {
   constructor(private blockchainClient: IBlockchainClient) {}
+
+  private sofStablecoinMaxPages(): number {
+    return env.sofStablecoinMaxPages;
+  }
+
+  private sofStablecoinPageSize(): number {
+    return SOF_STABLECOIN_PAGE_SIZE;
+  }
 
   private async sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -212,8 +221,8 @@ export class TransactionAnalyzer {
           this.blockchainClient.getStablecoinTrc20Transfers(address, {
             direction: 'incoming',
             contractAddresses: contracts,
-            maxPages: 5,
-            pageSize: 200,
+            maxPages: this.sofStablecoinMaxPages(),
+            pageSize: this.sofStablecoinPageSize(),
             confirm: true,
             debug: opts?.debug,
           }),
@@ -299,8 +308,8 @@ export class TransactionAnalyzer {
     const volumeByCounterparty = new Map<string, number>();
     let totalVolume = 0;
     const seenTxIds = new Set<string>();
-    const pageLimit = 200;
-    const maxPages = 5;
+    const pageLimit = this.sofStablecoinPageSize();
+    const maxPages = this.sofStablecoinMaxPages();
     let pagesFetched = 0;
     let scannedTxCount = 0;
     let stablecoinTxCount = 0;
@@ -420,8 +429,8 @@ export class TransactionAnalyzer {
         await this.blockchainClient.getStablecoinTrc20Transfers(address, {
           direction: 'outgoing',
           contractAddresses: contracts,
-          maxPages: 5,
-          pageSize: 200,
+          maxPages: this.sofStablecoinMaxPages(),
+          pageSize: this.sofStablecoinPageSize(),
           confirm: true,
         });
 
@@ -469,8 +478,8 @@ export class TransactionAnalyzer {
     const volumeByCounterparty = new Map<string, number>();
     let totalVolume = 0;
     const seenTxIds = new Set<string>();
-    const pageLimit = 200;
-    const maxPages = 5;
+    const pageLimit = this.sofStablecoinPageSize();
+    const maxPages = this.sofStablecoinMaxPages();
     let pagesFetched = 0;
     let scannedTxCount = 0;
     let stablecoinTxCount = 0;

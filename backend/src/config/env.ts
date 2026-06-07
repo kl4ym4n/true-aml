@@ -31,6 +31,8 @@ interface EnvConfig {
   tronUsdtContract: string;
   /** Mainnet USDC TRC20 (SoF / taint stablecoin sample). */
   tronUsdcContract: string;
+  /** Max TronScan pages per stablecoin contract for SoF / taint sample (default 30). */
+  sofStablecoinMaxPages: number;
   ingestion: {
     enabled: boolean;
     ofacCsvPath?: string;
@@ -179,6 +181,14 @@ function validateEnv(): EnvConfig {
     process.env.TRON_USDC_CONTRACT?.trim() ||
     'TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8';
 
+  const sofStablecoinMaxPagesRaw = parseInt(
+    process.env.SOF_STABLECOIN_MAX_PAGES || '30',
+    10
+  );
+  const sofStablecoinMaxPages = Number.isFinite(sofStablecoinMaxPagesRaw)
+    ? Math.min(100, Math.max(1, sofStablecoinMaxPagesRaw))
+    : 30;
+
   return {
     port,
     databaseUrl,
@@ -189,6 +199,7 @@ function validateEnv(): EnvConfig {
     blockchainProvider,
     tronUsdtContract,
     tronUsdcContract,
+    sofStablecoinMaxPages,
     ingestion: {
       enabled: ingestionEnabled,
       ofacCsvPath,
