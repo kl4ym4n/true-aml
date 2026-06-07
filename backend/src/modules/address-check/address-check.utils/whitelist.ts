@@ -26,6 +26,8 @@ const STRONG_WHITELIST = new Set<string>([
   'TWBPGLwQw2EbqYLLw1DJnTDt2ZQ9yJW1JJ',
   // Kucoin
   'TUpHuDkiCCmwaTZBHZvQdwWzGNm5t8J2b9',
+  // ProBit Exchange (closed; historical CEX inflow)
+  'TGEwJxVErWagXnriZATPMBFFbbeuad9m3h',
   // HTX
   'TFTWNgDBkQ5wQoP8RXpRznnHvAVV8x5jLu',
   'TNaRAoLUyYEV2uF7GUrzSjRQTU8v5ZJ5VR',

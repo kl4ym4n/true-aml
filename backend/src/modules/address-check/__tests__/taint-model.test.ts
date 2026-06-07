@@ -42,7 +42,87 @@ async function testWhitelist(): Promise<void> {
     getWhitelistLevel('TU4vEruvZwLLkSfV9bNw12EJTPvNr7Pvaa'),
     'strong'
   );
+  assert.equal(
+    getWhitelistLevel('TGEwJxVErWagXnriZATPMBFFbbeuad9m3h'),
+    'strong'
+  );
   assert.equal(getWhitelistLevel('T000000000000000000000000000000000'), null);
+}
+
+async function testStablecoinTransferMaxPagesPassed(): Promise<void> {
+  let capturedMaxPages: number | undefined;
+  let capturedPageSize: number | undefined;
+  const mockClient: Pick<IBlockchainClient, 'getStablecoinTrc20Transfers'> = {
+    async getStablecoinTrc20Transfers(
+      _address: string,
+      options?: { maxPages?: number; pageSize?: number }
+    ) {
+      capturedMaxPages = options?.maxPages;
+      capturedPageSize = options?.pageSize;
+      return {
+        transfers: [],
+        meta: {
+          pagesFetched: 0,
+          totalRowsFetched: 0,
+          matchedTransfers: 0,
+          uniqueCounterparties: 0,
+          contractsSeen: [],
+          tokenSymbolsSeen: [],
+          totalNormalizedVolume: 0,
+          truncated: false,
+        },
+      };
+    },
+  };
+
+  const analyzer = new TransactionAnalyzer(mockClient as IBlockchainClient);
+  await analyzer.fetchTRC20IncomingVolumes('TADDR');
+
+  assert.equal(capturedMaxPages, 30);
+  assert.equal(capturedPageSize, 200);
+}
+
+async function testStablecoinTransferTruncatedMeta(): Promise<void> {
+  const address = 'TADDR';
+  const mockClient: Pick<IBlockchainClient, 'getStablecoinTrc20Transfers'> = {
+    async getStablecoinTrc20Transfers() {
+      return {
+        transfers: [
+          {
+            txHash: 'tx1',
+            fromAddress: 'TFROM',
+            toAddress: address,
+            amount: 100,
+            contractAddress: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+            rawAmount: '100000000',
+            tokenSymbol: 'USDT',
+            tokenDecimals: 6,
+            tokenName: 'Tether USD',
+            timestamp: 1_700_000_000_000,
+            confirmed: true,
+          },
+        ],
+        meta: {
+          pagesFetched: 30,
+          totalRowsFetched: 6000,
+          matchedTransfers: 1,
+          uniqueCounterparties: 1,
+          contractsSeen: ['TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'],
+          tokenSymbolsSeen: ['USDT'],
+          totalNormalizedVolume: 100,
+          truncated: true,
+        },
+      };
+    },
+  };
+
+  const analyzer = new TransactionAnalyzer(mockClient as IBlockchainClient);
+  const result = await analyzer.fetchTRC20IncomingVolumes(address);
+
+  assert.equal(result.truncated, true);
+  assert.equal(result.pagesFetched, 30);
+  assert.equal(result.scannedTxCount, 6000);
+  assert.equal(result.totalVolume, 100);
 }
 
 async function testIncomingVolumePagination(): Promise<void> {
@@ -225,6 +305,8 @@ async function run(): Promise<void> {
   await testFinalScoreFormula();
   await testAdvancedRiskCalculatorBlend();
   await testWhitelist();
+  await testStablecoinTransferMaxPagesPassed();
+  await testStablecoinTransferTruncatedMeta();
   await testIncomingVolumePagination();
   await testHop2RiskyVolumeFormula();
   await testHop3RiskyVolumeAccumulation();
