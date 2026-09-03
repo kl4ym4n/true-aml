@@ -46,3 +46,10 @@ export function isExchangeLikePattern(patterns: TransactionPatterns): boolean {
 export const TAINT_EXP_K = 2.15;
 /** Extra taint score points per % risky stablecoin volume when taintPercent &lt; 6. */
 export const SMALL_TAINT_PERCENT_MULTIPLIER = 2.8;
+
+/** Trust calibration: continuous curve exponent. Higher = sharper suppression at high trusted share. */
+export const TRUST_CALIBRATION_EXP = 2;
+/** Trust calibration: base multiplier when trustedShare01=1 (max suppression floor). */
+export const TRUST_CALIBRATION_FLOOR = 0.5;
+/** Dangerous uplift multiplier: uplift = this * dangerousShare01 * 100 */
+export const TRUST_DANGEROUS_UPLIFT_K = 6;

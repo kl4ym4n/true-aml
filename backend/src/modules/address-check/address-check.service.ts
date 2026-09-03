@@ -65,12 +65,12 @@ import type { VolumeWeightedSourceRow } from './address-check.utils';
 import type { SourceFlowCalibration } from './address-check.types';
 import type { TransactionPatterns } from './address-check.pattern-analyzer';
 
-const MAX_HOP_LEVEL = 1;
+const MAX_HOP_LEVEL = 2;
 const MAX_TAINT_HOPS = 3;
-const TOP_K_ROOT_COUNT = 15;
-const TOP_K_DEEP = 8;
-const TAINT_CONCURRENCY = 4;
-const MAX_TAINT_MS = 45_000;
+const TOP_K_ROOT_COUNT = 25;
+const TOP_K_DEEP = 12;
+const TAINT_CONCURRENCY = 6;
+const MAX_TAINT_MS = 90_000;
 
 interface CachedSecurityData {
   addressSecurity?: AddressSecurity | null;
@@ -531,6 +531,19 @@ export class AddressCheckService {
     };
   }
 
+  /** Build RiskFlag[] from security check + blacklist result (no full pattern analysis). */
+  private buildFlagsFromSecurity(
+    security: AddressSecurity | null | undefined,
+    blacklistCategory: string | null | undefined,
+  ): RiskFlag[] {
+    const f: RiskFlag[] = [];
+    if (security?.isBlacklisted || !!blacklistCategory) f.push('blacklisted');
+    if (security?.isScam) f.push('scam');
+    if (security?.isPhishing) f.push('phishing');
+    if (security?.isMalicious) f.push('malicious');
+    return f;
+  }
+
   private async runMultiHopIfNeeded(
     address: string,
     hopLevel: number,
@@ -650,7 +663,8 @@ export class AddressCheckService {
     stablecoinSofWarning = warning;
     if (truncated && !stablecoinSofWarning) {
       stablecoinSofWarning =
-        'Выборка входящих USDT/USDC обрезана по лимиту страниц; старые крупные переводы могут не учитываться в SoF/taint.';
+        'Выборка входящих USDT/USDC обрезана по лимиту страниц; ' +
+        `проанализировано ${pagesFetched} страниц, старые крупные переводы могут не учитываться.`;
     }
     stablecoinSofDataSource = provider;
     taintInput = {
@@ -1077,7 +1091,7 @@ export class AddressCheckService {
           isAmlRiskyCounterparty({
             address: tAddr,
             entity: entityT,
-            flags: [],
+            flags: this.buildFlagsFromSecurity(secT, blT?.category ?? null),
             entityRiskWeight: rwT,
             isMetadataBlacklisted: secT?.isBlacklisted ?? blT != null,
             blacklistCategory: blT?.category ?? null,
@@ -1115,6 +1129,7 @@ export class AddressCheckService {
             const gamma = uVol / vols3.totalVolume;
             const pathShare = alpha * beta * gamma;
             const secU = await this.getAddressSecurityCached(uAddr);
+            const blU = await blacklistService.getBlacklistEntry(uAddr);
             const txsU =
               await this.transactionAnalyzer.fetchAddressTransactions(uAddr);
             const decayU = Math.exp(
@@ -1129,6 +1144,7 @@ export class AddressCheckService {
             );
             const entityU = packedU.resolution.entity;
             const rwU = getEntityRiskWeight(entityU);
+            const flagsU = this.buildFlagsFromSecurity(secU, blU?.category ?? null);
             cumulativeTaintRaw += pathShare * rwU * taintHopWeight(3) * decayU;
             taintHints.push(
               `${(pathShare * 100).toFixed(3)}% path via ${entityU} (hop 3)`
@@ -1137,12 +1153,14 @@ export class AddressCheckService {
               isAmlRiskyCounterparty({
                 address: uAddr,
                 entity: entityU,
-                flags: [],
+                flags: flagsU,
                 entityRiskWeight: rwU,
-                isMetadataBlacklisted: secU?.isBlacklisted ?? false,
+                isMetadataBlacklisted: secU?.isBlacklisted ?? blU != null,
+                blacklistCategory: blU?.category ?? null,
               })
             ) {
-              riskyIncomingVolume += uVol;
+              // Use pathShare * totalVolume for hop-3 — consistent with hop-2 approach
+              riskyIncomingVolume += pathShare * totalVolume;
             }
           }
         }
