@@ -182,12 +182,12 @@ function validateEnv(): EnvConfig {
     'TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8';
 
   const sofStablecoinMaxPagesRaw = parseInt(
-    process.env.SOF_STABLECOIN_MAX_PAGES || '30',
+    process.env.SOF_STABLECOIN_MAX_PAGES || '50',
     10
   );
   const sofStablecoinMaxPages = Number.isFinite(sofStablecoinMaxPagesRaw)
     ? Math.min(100, Math.max(1, sofStablecoinMaxPagesRaw))
-    : 30;
+    : 50;
 
   return {
     port,

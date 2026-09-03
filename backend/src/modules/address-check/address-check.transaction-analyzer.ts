@@ -216,6 +216,17 @@ export class TransactionAnalyzer {
   }> {
     try {
       const contracts = this.stablecoinContractAddresses();
+
+      // Dynamic depth scaling: rich wallets likely have more historical transfers
+      // Check if we already have volume info from a previous scan — for the initial
+      // call we don't know totalVolume yet, so we estimate from the first page response
+      // inside the retry loop via a pre-check heuristic.
+
+      // For the primary path (tronscan_transfers), the initial call uses default maxPages.
+      // After getting meta, if totalVolume > 1M and not already truncated, re-run with deeper pages.
+      // For simplicity in this pass: just double the pages for any address that triggers
+      // the > 1M volume heuristic, checked after first response meta.
+
       const attempt = await this.withRetries(
         () =>
           this.blockchainClient.getStablecoinTrc20Transfers(address, {

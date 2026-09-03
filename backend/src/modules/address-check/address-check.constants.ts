@@ -65,7 +65,7 @@ export const TAINT_STABLECOIN_CONTRACT_ADDRESSES = new Set<string>([
 export const SOF_STABLECOIN_PAGE_SIZE = 200;
 
 /** Max pages per stablecoin contract when scanning incoming/outgoing TRC-20 transfers. */
-export const SOF_STABLECOIN_MAX_PAGES = 30;
+export const SOF_STABLECOIN_MAX_PAGES = 50;
 
 /** Upper bound for SOF_STABLECOIN_MAX_PAGES env override. */
 export const SOF_STABLECOIN_MAX_PAGES_CAP = 100;

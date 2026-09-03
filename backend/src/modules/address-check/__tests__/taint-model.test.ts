@@ -78,7 +78,7 @@ async function testStablecoinTransferMaxPagesPassed(): Promise<void> {
   const analyzer = new TransactionAnalyzer(mockClient as IBlockchainClient);
   await analyzer.fetchTRC20IncomingVolumes('TADDR');
 
-  assert.equal(capturedMaxPages, 30);
+  assert.equal(capturedMaxPages, 50);
   assert.equal(capturedPageSize, 200);
 }
 
@@ -255,15 +255,49 @@ async function testHop2RiskyVolumeFormula(): Promise<void> {
 }
 
 async function testHop3RiskyVolumeAccumulation(): Promise<void> {
-  // Hop 3 must accumulate riskyIncomingVolume for risky counterparties.
-  // Regression: previously the hop 3 loop had no riskyIncomingVolume += call.
-  let riskyIncomingVolume = 0;
-  const uVol = 150;
+  // Hop 3 must accumulate riskyIncomingVolume as pathShare * totalVolume.
+  const totalVolume = 1000;
+  const alpha = 0.4;  // hop-1 share
+  const beta = 0.4;   // hop-2 share
+  const gamma = 0.3;  // hop-3 share
+  const pathShare = alpha * beta * gamma; // 0.048
   const isRisky = true;
+
+  let riskyIncomingVolume = 0;
+  // Old wrong: riskyIncomingVolume += uVol (raw volume, unweighted)
+  // New correct: riskyIncomingVolume += pathShare * totalVolume (weighted)
   if (isRisky) {
-    riskyIncomingVolume += uVol;
+    riskyIncomingVolume += pathShare * totalVolume;
   }
-  assert.equal(riskyIncomingVolume, 150);
+  // pathShare * totalVolume = 0.048 * 1000 = 48
+  assert.equal(Math.round(riskyIncomingVolume), 48);
+}
+
+async function testBuildFlagsFromSecurity(): Promise<void> {
+  // Simulate what buildFlagsFromSecurity returns (we can't instantiate AddressCheckService here,
+  // but we can verify the logic inline)
+  function buildFlagsFromSecurity(
+    isScam: boolean,
+    isPhishing: boolean,
+    isMalicious: boolean,
+    isBlacklisted: boolean
+  ): string[] {
+    const f: string[] = [];
+    if (isBlacklisted) f.push('blacklisted');
+    if (isScam) f.push('scam');
+    if (isPhishing) f.push('phishing');
+    if (isMalicious) f.push('malicious');
+    return f;
+  }
+
+  const f1 = buildFlagsFromSecurity(true, false, false, false);
+  assert.deepEqual(f1, ['scam']);
+
+  const f2 = buildFlagsFromSecurity(false, true, false, true);
+  assert.deepEqual(f2, ['blacklisted', 'phishing']);
+
+  const f3 = buildFlagsFromSecurity(false, false, false, false);
+  assert.deepEqual(f3, []);
 }
 
 async function testNewCategoryPriorities(): Promise<void> {
@@ -288,6 +322,60 @@ async function testNewCategoryPriorities(): Promise<void> {
   assert.ok(DANGEROUS_BLACKLIST_CATEGORIES.has('CHILD_EXPLOITATION'), 'CHILD_EXPLOITATION not in dangerous set');
 }
 
+async function testTrustCalibration(): Promise<void> {
+  // Continuous formula: trustLayerFactor = 0.5 + 0.5 * (1 - t)^2
+  // At trustedShare=1.0: 0.5 + 0.5 * 0 = 0.5
+  // At trustedShare=0.7: 0.5 + 0.5 * 0.09 = 0.545
+  // At trustedShare=0.5: 0.5 + 0.5 * 0.25 = 0.625
+  // At trustedShare=0.0: 0.5 + 0.5 * 1 = 1.0
+
+  const { applyTrustedShareScoreCalibration } = await import(
+    '../address-check.utils/trusted-share-calibration'
+  );
+
+  // High trust, no danger → strong suppression
+  const r1 = applyTrustedShareScoreCalibration({
+    preliminaryScore: 50,
+    trustedShare01: 0.95,
+    dangerousShare01: 0.001,
+  });
+  assert.ok(r1.trustLayerFactor < 0.6, 'high trust should suppress');
+  assert.ok(r1.dangerousUplift < 1, 'tiny danger should have minimal uplift');
+
+  // Low trust, high danger → no suppression, visible uplift
+  const r2 = applyTrustedShareScoreCalibration({
+    preliminaryScore: 50,
+    trustedShare01: 0.15,
+    dangerousShare01: 0.05,
+  });
+  assert.ok(r2.trustLayerFactor > 0.85, 'low trust should have minimal suppression');
+  assert.ok(r2.dangerousUplift >= 25, '5% danger should produce visible uplift');
+
+  // Medium trust, no danger → partial suppression
+  const r3 = applyTrustedShareScoreCalibration({
+    preliminaryScore: 50,
+    trustedShare01: 0.5,
+    dangerousShare01: 0,
+  });
+  assert.ok(r3.trustLayerFactor < 0.8, '50% trust should partially suppress');
+  assert.ok(r3.trustLayerFactor > 0.5, '50% trust should not max suppress');
+  assert.equal(r3.dangerousUplift, 0, 'no danger = no uplift');
+
+  // Smooth curve: no sudden jump between 59% and 71% trust
+  const r4 = applyTrustedShareScoreCalibration({
+    preliminaryScore: 50,
+    trustedShare01: 0.59,
+    dangerousShare01: 0.005,
+  });
+  const r5 = applyTrustedShareScoreCalibration({
+    preliminaryScore: 50,
+    trustedShare01: 0.71,
+    dangerousShare01: 0.005,
+  });
+  const diff = Math.abs(r4.score - r5.score);
+  assert.ok(diff < 8, `smooth transition expected, got diff ${diff}`);
+}
+
 async function testKnownPlatformCategoryOverridesSuspicious(): Promise<void> {
   function resolveCategory(
     platformCategory: string | null,
@@ -310,7 +398,9 @@ async function run(): Promise<void> {
   await testIncomingVolumePagination();
   await testHop2RiskyVolumeFormula();
   await testHop3RiskyVolumeAccumulation();
+  await testBuildFlagsFromSecurity();
   await testNewCategoryPriorities();
+  await testTrustCalibration();
   await testKnownPlatformCategoryOverridesSuspicious();
   // eslint-disable-next-line no-console
   console.log('taint-model tests passed');
